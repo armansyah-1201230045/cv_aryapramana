@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description"
+    content="CV Arya Pramana - Sistem logistik terintegrasi kopra: trading, shipping antar-pulau, BL & DO, pelabuhan, dan trucking ke pabrik." />
+  <title>cv.arya</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="app">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">
+          <img src="assets/logo-arya-pramana.png" alt="Logo CV Arya Pramana Trucking" />
+        </div>
+        <div>
+          <b>Arya Pramana</b>
+          <small>Trade · Shipping · Trucking</small>
+        </div>
+      </div>
+
+      <nav>
+        <button class="nav active" data-page="dashboard">⌂ <span>Dashboard</span></button>
+        <button class="nav" data-page="orders">▣ <span>Order Customer</span></button>
+        <button class="nav" data-page="kopra">◈ <span>Transaksi Kopra</span></button>
+        <button class="nav" data-page="shipping">⚓ <span>Shipping &amp; Kapal</span></button>
+        <button class="nav" data-page="documents">▤ <span>BL &amp; DO</span></button>
+        <button class="nav" data-page="ports">⌖ <span>Pelabuhan</span></button>
+        <button class="nav" data-page="trucking">🚚 <span>Trucking</span></button>
+        <button class="nav" data-page="customers">♙ <span>Customer / Pabrik</span></button>
+        <button class="nav" data-page="finance">Rp <span>Keuangan</span></button>
+        <button class="nav" data-page="reports">▥ <span>Laporan</span></button>
+      </nav>
+
+      <div class="side-bottom">
+        <div class="online"><i></i> Sistem Online · Data tersimpan otomatis</div>
+        <div class="user-mini">
+          <div class="avatar">AS</div>
+          <div>
+            <b>Owner</b>
+            <small>Administrator</small>
+          </div>
+        </div>
+        <button class="reset-btn" id="btnResetData" title="Kembalikan data ke awal">↺ Reset Data Demo</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <button id="mobileMenu" class="mobile-menu">☰</button>
+          <span class="crumb">Integrated Commodity Logistics</span>
+          <h1 id="pageTitle">Dashboard</h1>
+        </div>
+        <div class="top-actions">
+          <button class="icon-btn" data-page="orders" title="Cari order">⌕</button>
+          <button class="icon-btn" data-page="documents" title="Dokumen menunggu">🔔<em id="notifCount">0</em></button>
+          <div class="avatar">AS</div>
+        </div>
+      </header>
+
+      <!-- Page: Dashboard -->
+      <section id="dashboard" class="page active-page">
+        <div class="hero">
+          <div>
+            <span class="eyebrow">END-TO-END LOGISTICS</span>
+            <h2>Kopra dari supplier sampai pabrik.</h2>
+            <p>Cukup input sekali di Order Customer — semua modul ikut terupdate otomatis.</p>
+          </div>
+          <button class="primary" onclick="openOrderForm()">＋ Buat Order</button>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <span>Order Aktif</span>
+            <strong id="statActiveOrders">0</strong>
+            <b class="blue-t" id="statAntarPulau">0 antar-pulau</b>
+          </div>
+          <div class="stat">
+            <span>Container Berjalan</span>
+            <strong id="statContainers">0</strong>
+            <b class="blue-t" id="statActiveShips">0 kapal aktif</b>
+          </div>
+          <div class="stat">
+            <span>Pengiriman Trucking</span>
+            <strong id="statTruckings">0</strong>
+            <b class="up" id="statTruckActive">0 dalam perjalanan</b>
+          </div>
+          <div class="stat">
+            <span>Piutang</span>
+            <strong id="statReceivables">Rp 0</strong>
+            <b class="down" id="statInvoices">0 invoice</b>
+          </div>
+        </div>
+
+        <div class="flow card">
+          <div class="card-head">
+            <div>
+              <h3>Alur Order Antar-Pulau</h3>
+              <p>Jumlah order di setiap tahap: supplier → kapal → pelabuhan → pabrik</p>
+            </div>
+          </div>
+          <div class="timeline" id="flowTimeline"></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h3>Shipment Aktif</h3>
+                <p>Monitoring kapal &amp; container</p>
+              </div>
+              <button class="text-btn" data-page="shipping">Lihat semua →</button>
+            </div>
+            <div id="shipmentList" class="list"></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h3>Dokumen Penting</h3>
+                <p>BL / DO yang perlu ditindaklanjuti</p>
+              </div>
+              <button class="text-btn" data-page="documents">Kelola →</button>
+            </div>
+            <div id="docList" class="list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Page: Orders -->
+      <section id="orders" class="page">
+        <div class="section-head">
+          <div>
+            <h2>Order Customer</h2>
+            <p>Pusat data: satu order otomatis membuat transaksi kopra, booking kapal, BL/DO, port call, penugasan truk
+              &amp; tagihan.</p>
+          </div>
+          <button class="primary" onclick="openOrderForm()">＋ Order Baru</button>
+        </div>
+        <div class="toolbar">
+          <input id="orderSearch" placeholder="Cari order, customer, PT tujuan, container, nopol..." />
+          <select id="orderStatusFilter">
+            <option value="all">Semua status</option>
+            <option value="active">Sedang berjalan</option>
+            <option value="done">Selesai</option>
+          </select>
+        </div>
+        <div class="card table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>Supplier / Layanan</th>
+                <th>Rute</th>
+                <th>Moda</th>
+                <th>PT Tujuan</th>
+                <th>Muatan / Truk</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="ordersTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Page: Kopra -->
+      <section id="kopra" class="page">
+        <div class="section-head">
+          <div>
+            <h2>Transaksi Kopra</h2>
+            <p>Otomatis dari data tonase &amp; harga di setiap Order Customer.</p>
+          </div>
+          <button class="primary" onclick="openOrderForm()">＋ Transaksi via Order</button>
+        </div>
+        <div class="stats compact">
+          <div class="stat"><span>Total Volume</span><strong id="kopraVolume">0 ton</strong></div>
+          <div class="stat"><span>Nilai Pembelian</span><strong id="kopraBuy">Rp 0</strong></div>
+          <div class="stat"><span>Nilai Penjualan</span><strong id="kopraSell">Rp 0</strong></div>
+          <div class="stat"><span>Margin Kopra</span><strong id="kopraMargin">Rp 0</strong></div>
+        </div>
+        <div class="card table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Order</th>
+                <th>Supplier</th>
+                <th>Buyer / PT</th>
+                <th>Tonase</th>
+                <th>Harga Beli/kg</th>
+                <th>Harga Jual/kg</th>
+                <th>Margin</th>
+              </tr>
+            </thead>
+            <tbody id="kopraTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Page: Shipping -->
+      <section id="shipping" class="page">
+        <div class="section-head">
+          <div>
+            <h2>Shipping &amp; Kapal</h2>
+            <p>Booking kapal otomatis dari order antar-pulau. Update keberangkatan &amp; kedatangan di sini.</p>
+          </div>
+          <button class="primary" onclick="openOrderForm()">＋ Booking via Order</button>
+        </div>
+        <div class="ship-grid" id="shipGrid"></div>
+      </section>
+
+      <!-- Page: Documents -->
+      <section id="documents" class="page">
+        <div class="section-head">
+          <div>
+            <h2>BL &amp; Delivery Order</h2>
+            <p>Dokumen dibuat otomatis per order antar-pulau.</p>
+          </div>
+          <button class="primary" onclick="openOrderForm()">＋ Dokumen via Order</button>
+        </div>
+        <div class="notice">
+          ⚠️ <b>Kontrol dokumen:</b> truk tidak bisa diberangkatkan dari pelabuhan sebelum DO divalidasi. Sistem
+          mengunci alur ini otomatis.
+        </div>
+        <div class="card table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Dokumen</th>
+                <th>Order</th>
+                <th>Container</th>
+                <th>Pelabuhan</th>
+                <th>PT Tujuan</th>
+                <th>Release</th>
+                <th>Status</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="docTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Page: Ports -->
+      <section id="ports" class="page">
+        <div class="section-head">
+          <div>
+            <h2>Pelabuhan</h2>
+            <p>Posisi container di port asal &amp; port tujuan, mengikuti status order.</p>
+          </div>
+          <button class="primary" onclick="openOrderForm()">＋ Port Call via Order</button>
+        </div>
+        <div class="port-grid" id="portGrid"></div>
+      </section>
+
+      <!-- Page: Trucking -->
+      <section id="trucking" class="page">
+        <div class="section-head">
+          <div>
+            <h2>Trucking</h2>
+            <p>Penugasan truk otomatis dari order. Klik nama driver untuk melihat riwayat.</p>
+          </div>
+          <button class="primary" onclick="openOrderForm()">＋ Tugaskan via Order</button>
+        </div>
+        <div class="truck-grid" id="truckGrid"></div>
+        <div class="card" style="margin-top: 16px">
+          <div class="card-head">
+            <div>
+              <h3>Armada Tersedia</h3>
+              <p>Truk yang belum memiliki order aktif</p>
+            </div>
+          </div>
+          <div class="fleet-chips" id="fleetAvailable"></div>
+        </div>
+      </section>
+
+      <!-- Page: Customers -->
+      <section id="customers" class="page">
+        <div class="section-head">
+          <div>
+            <h2>Customer / Pabrik</h2>
+            <p>Daftar mitra otomatis terbentuk dari order: pabrik tujuan, supplier, dan perusahaan pelayaran.</p>
+          </div>
+          <button class="primary" onclick="openOrderForm()">＋ Tambah via Order</button>
+        </div>
+        <div class="customer-grid" id="customerGrid"></div>
+      </section>
+
+      <!-- Page: Finance -->
+      <section id="finance" class="page">
+        <div class="section-head">
+          <div>
+            <h2>Keuangan</h2>
+            <p>Pendapatan, pembelian kopra, freight, THC, DO fee &amp; uang jalan — dihitung per order.</p>
+          </div>
+          <button class="primary" onclick="openOrderForm()">＋ Order Baru</button>
+        </div>
+        <div class="stats compact">
+          <div class="stat"><span>Revenue</span><strong id="finRevenue">Rp 0</strong></div>
+          <div class="stat"><span>Pembelian + Biaya Logistik</span><strong id="finCost">Rp 0</strong></div>
+          <div class="stat"><span>Piutang</span><strong id="finReceivable">Rp 0</strong></div>
+          <div class="stat"><span>Laba Bersih</span><strong id="finProfit">Rp 0</strong></div>
+        </div>
+        <div class="card table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>PT Tujuan</th>
+                <th>Pendapatan</th>
+                <th>Pembelian Kopra</th>
+                <th>Biaya Logistik</th>
+                <th>Laba</th>
+                <th>Pembayaran</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="financeTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Page: Reports -->
+      <section id="reports" class="page">
+        <div class="section-head">
+          <div>
+            <h2>Laporan</h2>
+            <p>Volume bulanan &amp; profit per customer, otomatis dari seluruh order.</p>
+          </div>
+          <button class="primary" id="btnExport">⇩ Export CSV</button>
+        </div>
+        <div class="card report">
+          <h3>Volume Shipment Bulanan (ton)</h3>
+          <div class="bars" id="reportBars"></div>
+        </div>
+        <div class="card table-card" style="margin-top: 16px">
+          <table>
+            <thead>
+              <tr>
+                <th>PT Tujuan</th>
+                <th>Jumlah Order</th>
+                <th>Total Tonase</th>
+                <th>Revenue</th>
+                <th>Laba</th>
+              </tr>
+            </thead>
+            <tbody id="reportCustomer"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ===== MODAL: ORDER MASTER FORM ===== -->
+  <div class="modal-wrap" id="orderModal">
+    <div class="modal order-modal">
+      <button class="close" type="button" onclick="closeModal('orderModal')">×</button>
+      <h2 id="orderModalTitle">Tambah Order</h2>
+      <p class="muted">
+        Isi sekali di sini — data otomatis tersinkron ke Transaksi Kopra, Shipping, BL &amp; DO, Pelabuhan, Trucking,
+        Customer, Keuangan &amp; Laporan.
+      </p>
+
+      <form id="orderForm" autocomplete="off">
+        <!-- 1. Informasi Order -->
+        <fieldset class="form-section">
+          <legend>1 · Informasi Order</legend>
+          <div class="two">
+            <label>Supplier / Customer
+              <input name="customer" list="dlSupplier" required placeholder="Contoh: UD Makmur" />
+            </label>
+            <label>PT Tujuan (Pabrik)
+              <input name="factory" list="dlFactory" required placeholder="Contoh: PT Sari Mas Permai" />
+            </label>
+          </div>
+          <div class="two">
+            <label>Jenis Layanan
+              <select name="service_type">
+                <option value="Kopra + Shipping + Trucking (Lengkap)">Kopra + Shipping + Trucking (Lengkap)</option>
+                <option value="Jasa Trucking">Jasa Trucking</option>
+                <option value="Jasa Timbang">Jasa Timbang</option>
+              </select>
+            </label>
+            <label>Kota / Alamat Pabrik
+              <input name="factory_address" placeholder="Contoh: Surabaya" />
+            </label>
+          </div>
+          <div class="two">
+            <label>Asal / Lokasi Pickup Supplier
+              <input name="origin" required placeholder="Contoh: Bitung" />
+            </label>
+            <div class="choice-group">
+              <span>Rute</span>
+              <label><input type="radio" name="route_type" value="Antar-Pulau" checked /> Antar-Pulau</label>
+              <label><input type="radio" name="route_type" value="Domestik" /> Domestik</label>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- 2. Komoditas -->
+        <fieldset class="form-section">
+          <legend>2 · Komoditas Kopra</legend>
+          <div class="three">
+            <label>Tonase (ton)
+              <input name="tonnage" type="number" min="0" step="0.1" required placeholder="25" />
+            </label>
+          </div>
+        </fieldset>
+
+        <!-- 3. Shipping -->
+        <fieldset class="form-section" id="fsShipping">
+          <legend>3 · Shipping &amp; Kapal</legend>
+          <div class="two">
+            <label>Perusahaan Pelayaran
+              <input name="maritime" list="dlMaritime" required placeholder="PT Nusantara Maritime" />
+            </label>
+            <label>Nama Kapal
+              <input name="vessel" required placeholder="MV Bintang Laut" />
+            </label>
+          </div>
+          <div class="three">
+            <label>Voyage
+              <input name="voyage" placeholder="026E" />
+            </label>
+            <label>Port Asal (Muat)
+              <input name="port_origin" required placeholder="Pelabuhan Bitung" />
+            </label>
+            <label>Port Tujuan (Bongkar)
+              <input name="port_dest" required placeholder="Tanjung Perak" />
+            </label>
+          </div>
+          <label>ETD (Tanggal Berangkat)
+            <input name="etd" type="date" />
+          </label>
+        </fieldset>
+
+        <!-- 4. Muatan -->
+        <fieldset class="form-section">
+          <legend>4 · Muatan &amp; Container</legend>
+          <div class="choice-group">
+            <span>Jenis Angkutan</span>
+            <label><input type="radio" name="mode" value="Container" checked /> Container</label>
+            <label><input type="radio" name="mode" value="Curah" /> Curah</label>
+          </div>
+          <fieldset class="plain" id="containerBox">
+            <label>Jumlah Container
+              <select name="jumlah_container" id="jumlahContainer">
+                <option value="1" selected>1 Container (20FT)</option>
+                <option value="2">2 Container</option>
+                <option value="3">3 Container</option>
+                <option value="4">4 Container</option>
+                <option value="5">5 Container</option>
+                <option value="6">6 Container</option>
+                <option value="7">7 Container</option>
+                <option value="8">8 Container</option>
+                <option value="9">9 Container</option>
+                <option value="10">10 Container</option>
+              </select>
+            </label>
+            <div id="containerList" class="container-grid"></div>
+          </fieldset>
+        </fieldset>
+
+        <!-- 5. Dokumen -->
+        <fieldset class="form-section" id="fsDocs">
+          <legend>5 · Dokumen BL &amp; DO</legend>
+          <div class="two">
+            <label>No. Bill of Lading
+              <input name="bl_no" placeholder="Kosongkan = otomatis" />
+            </label>
+            <label>No. Delivery Order
+              <input name="do_no" placeholder="Kosongkan = otomatis" />
+            </label>
+          </div>
+        </fieldset>
+        
+        <!-- 6. Trucking -->
+        <fieldset class="form-section">
+          <legend>6 · Trucking</legend>
+          <div class="two">
+            <label>No. Polisi Truk
+              <select name="plate" id="orderPlate"></select>
+            </label>
+            <label>Driver / Supir
+              <input name="driver" id="orderDriver" readonly placeholder="Otomatis sesuai nopol" />
+            </label>
+          </div>
+          <fieldset class="plain" id="manualPlateBox" hidden disabled>
+            <label>Nomor Polisi Manual
+              <input type="text" name="manual_plate" id="manualPlate" required placeholder="Contoh: L 1234 XX" />
+            </label>
+          </fieldset>
+        </fieldset>
+
+        <!-- 7. Biaya -->
+        <fieldset class="form-section">
+          <legend>7 · Tarif, Biaya &amp; Pembayaran</legend>
+          <label>Tarif Jasa ke Customer (Rp) — jasa timbang / trucking
+            <input name="service_fee" type="number" min="0" step="1000" placeholder="0" />
+          </label>
+          <fieldset class="plain three" id="fsShipCost">
+            <label>Freight Kapal (Rp)
+              <input name="cost_freight" type="number" min="0" step="1000" placeholder="0" />
+            </label>
+            <label>THC / Port Handling (Rp)
+              <input name="cost_thc" type="number" min="0" step="1000" placeholder="0" />
+            </label>
+            <label>DO / Document Fee (Rp)
+              <input name="cost_do" type="number" min="0" step="1000" placeholder="0" />
+            </label>
+          </fieldset>
+          <div class="three">
+            <label>Uang Jalan Trucking (Rp)
+              <input name="cost_trucking" type="number" min="0" step="1000" placeholder="0" />
+            </label>
+            <label>Biaya Lain (Rp)
+              <input name="cost_other" type="number" min="0" step="1000" placeholder="0" />
+            </label>
+            <label>Status Pembayaran
+              <select name="payment">
+                <option value="Belum Lunas">Belum Lunas</option>
+                <option value="Lunas">Lunas</option>
+              </select>
+            </label>
+          </div>
+          <label>Catatan
+            <input name="notes" placeholder="Opsional" />
+          </label>
+        </fieldset>
+
+        <div id="orderSummary" class="order-summary"></div>
+        <button class="primary full" type="submit" id="orderSubmitBtn">Simpan Order</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Datalists autocomplete -->
+  <datalist id="dlSupplier"></datalist>
+  <datalist id="dlFactory"></datalist>
+  <datalist id="dlMaritime"></datalist>
+
+  <!-- ===== MODAL: ORDER DETAIL ===== -->
+  <div class="modal-wrap" id="orderDetailModal">
+    <div class="modal detail-modal">
+      <button class="close" type="button" onclick="closeModal('orderDetailModal')">×</button>
+      <div id="orderDetailBody"></div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: DRIVER ===== -->
+  <div class="modal-wrap" id="driverModal">
+    <div class="modal driver-modal">
+      <button class="close" type="button" onclick="closeModal('driverModal')">×</button>
+      <div class="driver-modal-header">
+        <div class="circle large-circle">🚚</div>
+        <div>
+          <h2 id="driverModalName">Nama Supir</h2>
+          <p class="muted" id="driverModalPlate"></p>
+        </div>
+      </div>
+      <div class="driver-info-cards">
+        <div class="driver-info-card"><span>Status Armada</span>
+          <div id="driverModalStatus"></div>
+        </div>
+        <div class="driver-info-card"><span>Kontak Supir</span><strong id="driverModalPhone"></strong></div>
+        <div class="driver-info-card"><span>Total Ritase</span><strong id="driverModalTrips"></strong></div>
+      </div>
+      <h3 style="margin: 16px 0 8px; font-size: 13px">Riwayat Pengiriman</h3>
+      <div id="driverModalHistory" class="driver-history-list"></div>
+      <button class="primary full" type="button" onclick="closeModal('driverModal')"
+        style="margin-top: 15px">Tutup</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="script.js"></script>
+</body>
+
+</html>
