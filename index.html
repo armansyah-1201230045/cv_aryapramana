@@ -38,7 +38,7 @@
       </nav>
 
       <div class="side-bottom">
-        <div class="online"><i></i> Sistem Online · Data tersimpan otomatis</div>
+        <div class="online"><i></i> <span id="storageStatus">Belum terhubung</span></div>
         <div class="user-mini">
           <div class="avatar">AS</div>
           <div>
@@ -46,6 +46,7 @@
             <small>Administrator</small>
           </div>
         </div>
+        <button class="reset-btn" id="btnSignOut" type="button">Keluar dari akun cloud</button>
         <button class="reset-btn" id="btnResetData" title="Kembalikan data ke awal">↺ Reset Data Demo</button>
       </div>
     </aside>
@@ -579,8 +580,25 @@
     </div>
   </div>
 
+  <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
+    <div class="auth-card">
+      <div class="auth-logo">AP</div>
+      <span class="eyebrow">CV ARYA PRAMANA</span>
+      <h1 id="authTitle">Masuk ke sistem</h1>
+      <p id="authMessage" class="auth-message" role="status"></p>
+      <form id="authForm">
+        <label for="authEmail">Email</label>
+        <input id="authEmail" type="email" autocomplete="username" required />
+        <label for="authPassword">Password</label>
+        <input id="authPassword" type="password" autocomplete="current-password" required />
+        <button id="authSubmit" class="primary full" type="submit">Masuk</button>
+      </form>
+      <button id="useLocalMode" class="auth-local" type="button">Gunakan mode lokal (browser ini)</button>
+    </div>
+  </section>
+
   <div id="toast" class="toast"></div>
-  <script src="script.js"></script>
+  <script type="module" src="script.js"></script>
 </body>
 
 </html>

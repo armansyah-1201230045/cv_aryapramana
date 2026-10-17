@@ -1,3 +1,5 @@
+import { createClient } from "@supabase/supabase-js";
+
 "use strict";
 
 /* =========================================================
@@ -179,6 +181,25 @@ function seedState() {
 
 // ---------- Persistence ----------
 const STORAGE_KEY = "cv_arya_pramana_db_v2";
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").trim();
+const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
+let supabase = null;
+let supabaseConfigError = null;
+if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+  try {
+    const url = new URL(SUPABASE_URL);
+    if (url.protocol !== "https:" || !url.hostname.endsWith(".supabase.co")) {
+      throw new Error("URL harus berupa Project URL Supabase, misalnya https://xxxx.supabase.co.");
+    }
+    supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } catch (error) {
+    supabaseConfigError = error.message;
+  }
+}
+let authUser = null;
+let persistenceMode = "locked";
+let cloudSaveQueue = Promise.resolve();
+
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -192,12 +213,192 @@ function loadState() {
   return seedState();
 }
 let state = loadState();
-function saveState() {
+function saveLocalState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     localStorage.removeItem("cv_arya_pramana_db_v1");
   } catch (e) {
-    console.error("Gagal menyimpan data:", e);
+    console.error("Gagal menyimpan data lokal:", e);
+    toast("Gagal menyimpan data di browser ini.");
+  }
+}
+
+function setStorageStatus(message) {
+  const status = $("#storageStatus");
+  if (status) status.textContent = message;
+}
+
+function saveState() {
+  saveLocalState();
+  if (persistenceMode !== "cloud" || !authUser || !supabase) return;
+
+  const userId = authUser.id;
+  const snapshot = JSON.parse(JSON.stringify(state));
+  cloudSaveQueue = cloudSaveQueue.then(async () => {
+    const { error } = await supabase.rpc("sync_my_orders", {
+      p_orders: snapshot.orders,
+      p_seq: snapshot.seq,
+    });
+    if (error) throw error;
+    if (persistenceMode === "cloud" && authUser?.id === userId) {
+      setStorageStatus(`Cloud tersinkron · ${authUser.email}`);
+    }
+  }).catch((error) => {
+    console.error("Gagal menyinkronkan data ke Supabase:", error);
+    setStorageStatus("Gagal sinkron · tersimpan lokal");
+    toast("Gagal menyinkronkan ke Supabase. Periksa koneksi; data lokal tetap tersimpan.");
+  });
+}
+
+function showAuthGate(message) {
+  $("#authGate").classList.add("show");
+  $("#authMessage").textContent = message;
+}
+
+function hideAuthGate() {
+  $("#authGate").classList.remove("show");
+}
+
+function setLocalMode() {
+  authUser = null;
+  persistenceMode = "local";
+  setStorageStatus("Data lokal · browser ini saja");
+  hideAuthGate();
+  render();
+}
+
+async function activateCloudSession(user) {
+  showAuthGate("Memuat data akun...");
+  const { data: orderRows, error: ordersError } = await supabase
+    .from("orders")
+    .select("order_id, data")
+    .order("order_id", { ascending: false });
+
+  if (ordersError) throw ordersError;
+
+  const { data: record, error } = await supabase
+    .from("app_state")
+    .select("state")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (record?.state && !Array.isArray(record.state.orders)) {
+    throw new Error("Format data cloud tidak valid; data tidak dimuat.");
+  }
+
+  if (orderRows.length) {
+    if (orderRows.some((row) => !row.data || row.data.id !== row.order_id)) {
+      throw new Error("Format data order di cloud tidak valid; data tidak dimuat.");
+    }
+    const maxId = orderRows.reduce((max, row) => {
+      const match = row.order_id.match(/^ORD-(\d+)$/);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 268);
+    state = {
+      seq: Math.max(record?.state?.seq || 268, maxId),
+      orders: orderRows.map((row) => row.data),
+    };
+  } else if (record?.state && Array.isArray(record.state.orders) && record.state.orders.length) {
+    state = { seq: record.state.seq || 268, orders: record.state.orders };
+    const { error: migrateError } = await supabase.rpc("sync_my_orders", {
+      p_orders: state.orders,
+      p_seq: state.seq,
+    });
+    if (migrateError) throw migrateError;
+  } else if (record?.state) {
+    state = { seq: record.state.seq || 268, orders: [] };
+  } else {
+    let initialState = seedState();
+    try {
+      const savedLocal = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      if (savedLocal && Array.isArray(savedLocal.orders) &&
+        confirm("Belum ada data cloud untuk akun ini. Impor data lokal browser ini ke cloud? Pilih Batal untuk memulai dari data demo.")) {
+        initialState = { seq: savedLocal.seq || 268, orders: savedLocal.orders };
+      }
+    } catch (error) {
+      console.error("Data lokal tidak dapat dibaca untuk impor:", error);
+      toast("Data lokal tidak dapat dibaca; cloud dimulai dengan data demo.");
+    }
+    const { error: saveError } = await supabase.rpc("sync_my_orders", {
+      p_orders: initialState.orders,
+      p_seq: initialState.seq,
+    });
+    if (saveError) throw saveError;
+    state = initialState;
+  }
+
+  authUser = user;
+  persistenceMode = "cloud";
+  saveLocalState();
+  setStorageStatus(`Cloud tersinkron · ${user.email}`);
+  hideAuthGate();
+  render();
+}
+
+async function initializeApp() {
+  const authMessage = supabase
+    ? "Masuk dengan akun Supabase untuk membuka data cloud."
+    : supabaseConfigError
+      ? `Konfigurasi Supabase belum valid: ${supabaseConfigError} Periksa file .env.local.`
+      : "Supabase belum dikonfigurasi. Atur URL dan anon key di file .env.local, atau gunakan mode lokal.";
+  showAuthGate(authMessage);
+
+  $("#authForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = $("#authSubmit");
+    const message = $("#authMessage");
+    button.disabled = true;
+    message.textContent = "Memproses login...";
+    try {
+      if (!supabase) throw new Error("Supabase belum dikonfigurasi. Isi .env.local lalu jalankan ulang server.");
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: $("#authEmail").value.trim(),
+        password: $("#authPassword").value,
+      });
+      if (error) throw error;
+      await activateCloudSession(data.user);
+    } catch (error) {
+      console.error("Login Supabase gagal:", error);
+      message.textContent = error.message || "Login gagal. Periksa konfigurasi dan akun Supabase.";
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $("#useLocalMode").addEventListener("click", setLocalMode);
+  $("#btnSignOut").addEventListener("click", async () => {
+    await cloudSaveQueue;
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Logout Supabase gagal:", error);
+      toast("Gagal keluar dari akun Supabase.");
+      return;
+    }
+    authUser = null;
+    persistenceMode = "locked";
+    setStorageStatus("Belum terhubung");
+    showAuthGate("Anda sudah keluar. Masuk kembali atau pilih mode lokal pada browser ini.");
+  });
+
+  if (!supabase) {
+    $("#authSubmit").disabled = true;
+    return;
+  }
+
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error) {
+    console.error("Gagal memeriksa sesi Supabase:", error);
+    $("#authMessage").textContent = "Sesi tidak dapat diperiksa. Silakan login ulang atau gunakan mode lokal.";
+    return;
+  }
+  if (session) {
+    try {
+      await activateCloudSession(session.user);
+    } catch (activationError) {
+      console.error("Gagal memuat data Supabase:", activationError);
+      $("#authMessage").textContent = `Data cloud gagal dimuat: ${activationError.message}`;
+    }
   }
 }
 const findOrder = (id) => state.orders.find((o) => o.id === id);
@@ -1069,10 +1270,13 @@ $("#btnResetData").addEventListener("click", () => {
 
 // Sinkron antar tab browser
 window.addEventListener("storage", (e) => {
-  if (e.key === STORAGE_KEY) {
+  if (e.key === STORAGE_KEY && persistenceMode === "local") {
     state = loadState();
     render();
   }
 });
 
-render();
+initializeApp().catch((error) => {
+  console.error("Gagal menginisialisasi aplikasi:", error);
+  showAuthGate(`Aplikasi gagal dimulai: ${error.message}`);
+});

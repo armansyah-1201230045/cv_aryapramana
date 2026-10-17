@@ -30,3 +30,16 @@ npm run dev
 ```
 
 Buka browser di `http://localhost:5173/`.
+
+## Menghubungkan Supabase
+
+1. Buat project di [Supabase](https://supabase.com/) dan jalankan seluruh isi [`supabase/schema.sql`](./supabase/schema.sql) melalui SQL Editor. Jika sebelumnya pernah menjalankan versi lama, jalankan ulang seluruh file setelah perubahan ini.
+2. Buat akun pemilik di **Authentication → Users** pada Supabase. Aplikasi ini memakai login email/password; pendaftaran akun publik tidak disediakan.
+3. Salin `.env.example` menjadi `.env.local`, lalu isi `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` dari **Project Settings → API**. Gunakan anon/publishable key saja; jangan pernah menaruh `service_role` key di aplikasi browser.
+4. Jalankan ulang `npm run dev`, lalu masuk dengan akun Supabase tersebut.
+
+Setiap order disimpan sebagai satu baris di tabel `orders`; kolom `customer`, `factory`, `stage`, dan `created_at` mudah dibaca dari Table Editor, sedangkan semua detail order ada pada kolom `data` (JSON). `app_state` hanya menyimpan nomor urut order. Row Level Security membatasi akses ke akun pemiliknya. Jika cloud masih berisi format lama di `app_state`, aplikasi memigrasikannya ke `orders` saat login; data lokal tetap ditanyakan sebelum diimpor bila belum ada data cloud. Pilihan **mode lokal** hanya menyimpan data pada browser/perangkat saat ini dan tidak melakukan sinkronisasi.
+
+## Publikasi ke GitHub Pages
+
+Workflow [`deploy-pages.yml`](./.github/workflows/deploy-pages.yml) menerbitkan site otomatis saat ada push ke branch `main`. Di GitHub repository settings, tambahkan Actions repository secrets `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY`, lalu pilih **Settings → Pages → Build and deployment → Source: GitHub Actions**. Jangan simpan `service_role` key sebagai secret aplikasi. Setelah workflow selesai, site tersedia di `https://armansyah-1201230045.github.io/cv_aryapramana/`.
