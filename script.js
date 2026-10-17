@@ -14,17 +14,17 @@ import { createClient } from "@supabase/supabase-js";
 
 // ---------- Master Armada ----------
 const TRUCK_FLEET = [
-  { plate: "L 8231 AB", driver: "Budi Santoso", phone: "0812-3456-7890", type: "Tronton Wingbox 20FT" },
-  { plate: "L 8232 AB", driver: "Andi Saputra", phone: "0812-3456-7891", type: "Trailer 20FT" },
-  { plate: "L 8233 AB", driver: "Dimas Pratama", phone: "0812-3456-7892", type: "Tronton Bak Curah" },
-  { plate: "L 8234 AB", driver: "Rizky Maulana", phone: "0812-3456-7893", type: "Trailer 40FT" },
-  { plate: "L 8235 AB", driver: "Fajar Ramadhan", phone: "0812-3456-7894", type: "Trailer 20FT" },
-  { plate: "L 8236 AB", driver: "Agus Setiawan", phone: "0812-3456-7895", type: "Tronton Bak Curah" },
-  { plate: "L 8237 AB", driver: "Bayu Kurniawan", phone: "0812-3456-7896", type: "Tronton Wingbox" },
-  { plate: "L 8238 AB", driver: "Hendra Wijaya", phone: "0812-3456-7897", type: "Trailer 20FT" },
-  { plate: "L 8239 AB", driver: "Yusuf Setiawan", phone: "0812-3456-7898", type: "Trailer 20FT" },
-  { plate: "L 8240 AB", driver: "Rian Firmansyah", phone: "0812-3456-7899", type: "Tronton Bak Curah" },
-  { plate: "L 8241 AB", driver: "Doni Irawan", phone: "0812-3456-7800", type: "Trailer 20FT" },
+  { plate: "W 8603 QB", driver: "MAT", phone: "0812-3456-7890", type: "Tronton Wingbox 20FT" },
+  { plate: "W 8797 QF", driver: "BUDI", phone: "0812-3456-7891", type: "Trailer 20FT" },
+  { plate: "L 9641 UB", driver: "HASAN", phone: "0812-3456-7892", type: "Tronton Bak Curah" },
+  { plate: "L 8824 UUB", driver: "HOSEN", phone: "0812-3456-7893", type: "Trailer 40FT" },
+  { plate: "L 8505 UX", driver: "KOSONG", phone: "0812-3456-7894", type: "Trailer 20FT" },
+  { plate: "L 8463 UL", driver: "PARMAN", phone: "0812-3456-7895", type: "Tronton Bak Curah" },
+  { plate: "L 8939 UV", driver: "KOSONG", phone: "0812-3456-7896", type: "Tronton Wingbox" },
+  { plate: "L 8945 UCD", driver: "HAYUR", phone: "0812-3456-7897", type: "Trailer 20FT" },
+  { plate: "AG 8106 AB", driver: "YOYOK", phone: "0812-3456-7898", type: "Trailer 20FT" },
+  { plate: "S 9814 NC", driver: "SUPRI", phone: "0812-3456-7899", type: "Tronton Bak Curah" },
+  { plate: "B 9005 EA", driver: "TOHA", phone: "0812-3456-7800", type: "Trailer 20FT" },
   { plate: "L 8242 AB", driver: "Arif Nugroho", phone: "0812-3456-7801", type: "Tronton Wingbox" },
 ];
 const FLEET_MAP = Object.fromEntries(TRUCK_FLEET.map((t) => [t.plate, t]));
