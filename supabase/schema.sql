@@ -131,3 +131,124 @@ $$;
 
 revoke all on function public.sync_my_orders(jsonb, integer) from public, anon;
 grant execute on function public.sync_my_orders(jsonb, integer) to authenticated;
+
+create table if not exists public.invoices (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  order_id text not null,
+  invoice_number text not null,
+  issued_at date not null default current_date,
+  due_date date,
+  customer_name text not null,
+  factory_name text not null default '',
+  description text not null,
+  order_snapshot jsonb not null check (jsonb_typeof(order_snapshot) = 'object'),
+  amount_total numeric(14, 2) not null check (amount_total > 0),
+  amount_paid numeric(14, 2) not null default 0 check (amount_paid >= 0 and amount_paid <= amount_total),
+  status text not null default 'Belum Lunas'
+    check (status in ('Belum Lunas', 'Lunas', 'Batal')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, order_id),
+  unique (user_id, invoice_number),
+  foreign key (user_id, order_id)
+    references public.orders (user_id, order_id) on delete cascade
+);
+
+create index if not exists invoices_user_created_at_idx
+  on public.invoices (user_id, created_at desc);
+
+alter table public.invoices enable row level security;
+
+revoke all on public.invoices from anon;
+grant select, insert on public.invoices to authenticated;
+
+drop policy if exists "Users can read own invoices" on public.invoices;
+create policy "Users can read own invoices"
+  on public.invoices for select to authenticated
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can insert own invoices" on public.invoices;
+create policy "Users can insert own invoices"
+  on public.invoices for insert to authenticated
+  with check ((select auth.uid()) = user_id);
+
+create table if not exists public.invoice_payments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  invoice_id uuid not null references public.invoices (id) on delete cascade,
+  amount numeric(14, 2) not null check (amount > 0),
+  method text not null,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists invoice_payments_user_created_at_idx
+  on public.invoice_payments (user_id, created_at desc);
+
+alter table public.invoice_payments enable row level security;
+
+revoke all on public.invoice_payments from anon;
+grant select on public.invoice_payments to authenticated;
+
+drop policy if exists "Users can read own invoice payments" on public.invoice_payments;
+create policy "Users can read own invoice payments"
+  on public.invoice_payments for select to authenticated
+  using ((select auth.uid()) = user_id);
+
+create or replace function public.record_invoice_payment(
+  p_invoice_id uuid,
+  p_amount numeric,
+  p_method text,
+  p_notes text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := auth.uid();
+  invoice_row public.invoices%rowtype;
+begin
+  if current_user_id is null then
+    raise exception 'Authentication required';
+  end if;
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'Payment amount must be positive';
+  end if;
+  if p_method is null or pg_catalog.btrim(p_method) = '' then
+    raise exception 'Payment method is required';
+  end if;
+
+  select * into invoice_row
+  from public.invoices
+  where id = p_invoice_id and user_id = current_user_id
+  for update;
+
+  if not found then
+    raise exception 'Invoice not found';
+  end if;
+  if invoice_row.status = 'Batal' then
+    raise exception 'Cannot pay a cancelled invoice';
+  end if;
+  if p_amount > invoice_row.amount_total - invoice_row.amount_paid then
+    raise exception 'Payment exceeds invoice balance';
+  end if;
+
+  insert into public.invoice_payments (user_id, invoice_id, amount, method, notes)
+  values (current_user_id, p_invoice_id, p_amount, pg_catalog.btrim(p_method), nullif(pg_catalog.btrim(p_notes), ''));
+
+  update public.invoices
+  set amount_paid = amount_paid + p_amount,
+      status = case
+        when amount_paid + p_amount >= amount_total then 'Lunas'
+        else 'Belum Lunas'
+      end,
+      updated_at = pg_catalog.now()
+  where id = p_invoice_id and user_id = current_user_id;
+end;
+$$;
+
+revoke all on function public.record_invoice_payment(uuid, numeric, text, text) from public, anon;
+grant execute on function public.record_invoice_payment(uuid, numeric, text, text) to authenticated;

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { jsPDF } from "jspdf";
 
 "use strict";
 
@@ -411,7 +412,7 @@ let lastSavedId = null;
 const titles = {
   dashboard: "Dashboard", orders: "Order Customer", kopra: "Transaksi Kopra", shipping: "Shipping & Kapal",
   documents: "BL & DO", ports: "Pelabuhan", trucking: "Trucking", customers: "Customer / Pabrik",
-  finance: "Keuangan", reports: "Laporan",
+  finance: "Keuangan", reports: "Laporan", invoices: "Invoice & Pembayaran",
 };
 
 function goTo(page) {
@@ -1267,6 +1268,434 @@ $("#btnResetData").addEventListener("click", () => {
   render();
   toast("Data demo berhasil direset");
 });
+
+
+function invoiceBillableItems(order) {
+  const items = [];
+  const kopraSales =
+    num(order.sellPrice) * num(order.tonnage) * 1000;
+
+  if (kopraSales > 0) {
+    items.push({
+      description: "Penjualan kopra",
+      quantity: num(order.tonnage),
+      unit: "ton",
+      unit_price: num(order.sellPrice) * 1000,
+      amount: kopraSales,
+    });
+  }
+
+  if (num(order.serviceFee) > 0) {
+    items.push({
+      description: "Jasa trucking / logistik",
+      quantity: 1,
+      unit: "layanan",
+      unit_price: num(order.serviceFee),
+      amount: num(order.serviceFee),
+    });
+  }
+
+  return items;
+}
+
+async function renderInvoices() {
+  const body = document.querySelector("#invoiceTable");
+  const orderBody = document.querySelector("#invoiceOrderTable");
+
+  if (!body || !orderBody) return;
+
+  if (persistenceMode !== "cloud" || !authUser || !supabase) {
+    body.innerHTML = `
+      <tr><td colspan="8" class="empty">
+        Login ke akun Supabase untuk mengelola invoice.
+      </td></tr>`;
+    orderBody.innerHTML = "";
+    return;
+  }
+
+  body.innerHTML = `
+    <tr><td colspan="8" class="empty">Memuat data...</td></tr>`;
+
+  try {
+    const { data: invoices, error } = await supabase
+      .from("invoices")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const rows = invoices || [];
+    const total = rows.reduce(
+      (sum, inv) => sum + Number(inv.amount_total), 0
+    );
+    const paid = rows.reduce(
+      (sum, inv) => sum + Number(inv.amount_paid), 0
+    );
+
+    document.querySelector("#invCount").textContent = rows.length;
+    document.querySelector("#invTotal").textContent =
+      formatInvoiceRp(total);
+    document.querySelector("#invPaid").textContent =
+      formatInvoiceRp(paid);
+    document.querySelector("#invReceivable").textContent =
+      formatInvoiceRp(total - paid);
+
+    body.innerHTML = rows.length
+      ? rows.map(inv => {
+          const remaining =
+            Number(inv.amount_total) - Number(inv.amount_paid);
+
+          const overdue =
+            inv.status !== "Lunas" &&
+            inv.status !== "Batal" &&
+            inv.due_date &&
+            inv.due_date < new Date().toLocaleDateString("en-CA");
+
+          const status = inv.status === "Lunas"
+            ? "Lunas"
+            : inv.status === "Batal"
+              ? "Batal"
+              : overdue ? "Jatuh Tempo" : "Belum Lunas";
+
+          return `
+            <tr>
+              <td><b>${esc(inv.invoice_number)}</b></td>
+              <td>${esc(inv.order_id)}</td>
+              <td>${esc(inv.customer_name)}</td>
+              <td>${formatInvoiceRp(inv.amount_total)}</td>
+              <td>${formatInvoiceRp(inv.amount_paid)}</td>
+              <td>${formatInvoiceRp(remaining)}</td>
+              <td>${esc(status)}</td>
+              <td>
+                <div class="act">
+                  <button class="btn-sm"
+                    onclick="downloadInvoicePdf('${inv.id}')">
+                    PDF
+                  </button>
+                  ${inv.status !== "Lunas" && inv.status !== "Batal"
+                    ? `<button class="btn-sm go"
+                        onclick="addInvoicePayment('${inv.id}', ${remaining})">
+                        Bayar
+                      </button>`
+                    : ""}
+                </div>
+              </td>
+            </tr>`;
+        }).join("")
+      : `<tr><td colspan="8" class="empty">
+           Belum ada invoice.
+         </td></tr>`;
+
+    const invoicedOrderIds = new Set(rows.map(inv => inv.order_id));
+    const availableOrders = state.orders.filter(
+      order => !invoicedOrderIds.has(order.id)
+    );
+
+    orderBody.innerHTML = availableOrders.length
+      ? availableOrders.map(order => {
+          const amount = invoiceBillableItems(order)
+            .reduce((sum, item) => sum + item.amount, 0);
+
+          return `
+            <tr>
+              <td>${esc(order.id)}</td>
+              <td>${esc(order.customer || "—")}</td>
+              <td>${esc(order.factory || "—")}</td>
+              <td>${formatInvoiceRp(amount)}</td>
+              <td>
+                <button class="btn-sm go"
+                  onclick="createInvoiceFromOrder('${order.id}')">
+                  Buat Invoice
+                </button>
+              </td>
+            </tr>`;
+        }).join("")
+      : `<tr><td colspan="5" class="empty">
+           Semua order sudah memiliki invoice.
+         </td></tr>`;
+
+  } catch (error) {
+    console.error("Gagal memuat invoice:", error);
+    body.innerHTML = `
+      <tr><td colspan="8" class="empty">
+        Gagal memuat invoice: ${esc(error.message)}
+      </td></tr>`;
+  }
+}
+
+function formatInvoiceRp(value) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(Number(value) || 0);
+}
+
+async function createInvoiceFromOrder(orderId) {
+  if (persistenceMode !== "cloud" || !authUser || !supabase) {
+    toast("Login ke Supabase terlebih dahulu.");
+    return;
+  }
+
+  const order = findOrder(orderId);
+  if (!order) {
+    toast("Order tidak ditemukan.");
+    return;
+  }
+
+  const items = invoiceBillableItems(order);
+  const total = items.reduce((sum, item) => sum + item.amount, 0);
+
+  if (total <= 0) {
+    toast("Order belum memiliki nilai penjualan atau tarif jasa.");
+    return;
+  }
+
+  const { data: existing, error: checkError } = await supabase
+    .from("invoices")
+    .select("id")
+    .eq("order_id", order.id)
+    .maybeSingle();
+
+  if (checkError) {
+    toast("Gagal memeriksa invoice: " + checkError.message);
+    return;
+  }
+
+  if (existing) {
+    toast("Order ini sudah memiliki invoice.");
+    await renderInvoices();
+    return;
+  }
+
+  const dueDate = prompt(
+    "Tanggal jatuh tempo (YYYY-MM-DD). Kosongkan jika belum ditentukan:"
+  );
+
+  if (dueDate === null) return;
+
+  if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    toast("Format tanggal harus YYYY-MM-DD.");
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const invoiceNumber =
+    `INV-${today.replaceAll("-", "")}-${order.id}`;
+
+  const snapshot = {
+    order_id: order.id,
+    customer: order.customer,
+    factory: order.factory,
+    factoryAddress: order.factoryAddress,
+    origin: order.origin,
+    routeType: order.routeType,
+    mode: order.mode,
+    containers: order.containers || [],
+    plate: order.plate,
+    driver: order.driver,
+    blNo: order.blNo,
+    doNo: order.doNo,
+    items,
+  };
+
+  const { error } = await supabase.from("invoices").insert({
+    user_id: authUser.id,
+    order_id: order.id,
+    invoice_number: invoiceNumber,
+    issued_at: today,
+    due_date: dueDate || null,
+    customer_name: order.factory || order.customer,
+    factory_name: order.factory || "",
+    description: "Tagihan berdasarkan order " + order.id,
+    order_snapshot: snapshot,
+    amount_total: total,
+    amount_paid: 0,
+    status: "Belum Lunas",
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      toast("Invoice untuk order ini sudah dibuat.");
+    } else {
+      console.error(error);
+      toast("Gagal menyimpan invoice: " + error.message);
+    }
+    return;
+  }
+
+  toast("Invoice berhasil dibuat.");
+  await renderInvoices();
+}
+
+
+async function downloadInvoicePdf(invoiceId) {
+  if (persistenceMode !== "cloud" || !authUser || !supabase) {
+    toast("Login ke Supabase terlebih dahulu.");
+    return;
+  }
+
+  const { data: inv, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("id", invoiceId)
+    .maybeSingle();
+
+  if (error || !inv) {
+    toast("Invoice tidak ditemukan atau tidak dapat diakses.");
+    return;
+  }
+
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const snapshot = inv.order_snapshot || {};
+  const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+
+  const rupiah = value =>
+    "Rp " + new Intl.NumberFormat("id-ID", {
+      maximumFractionDigits: 0,
+    }).format(Number(value) || 0);
+
+  const dateText = value =>
+    value ? new Date(value + "T00:00:00").toLocaleDateString("id-ID")
+      : "-";
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(19);
+  doc.text("CV ARYA PRAMANA", 15, 20);
+
+  doc.setFontSize(11);
+  doc.text("INVOICE", 195, 20, { align: "right" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text("Trade - Shipping - Trucking", 15, 27);
+  doc.text("No: " + inv.invoice_number, 195, 28, { align: "right" });
+
+  doc.line(15, 34, 195, 34);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Ditagihkan kepada", 15, 43);
+  doc.text("Informasi Invoice", 115, 43);
+
+  doc.setFont("helvetica", "normal");
+  doc.text(String(inv.customer_name || "-"), 15, 50);
+  doc.text("Order: " + String(inv.order_id), 115, 50);
+  doc.text("Tanggal: " + dateText(inv.issued_at), 115, 57);
+  doc.text("Jatuh tempo: " + dateText(inv.due_date), 115, 64);
+
+  doc.text("PT tujuan: " + String(inv.factory_name || "-"), 15, 57);
+  doc.text("Asal: " + String(snapshot.origin || "-"), 15, 64);
+  doc.text(
+    "Truk: " + String(snapshot.plate || "-") +
+      " | Driver: " + String(snapshot.driver || "-"),
+    15, 71
+  );
+
+  let y = 86;
+  doc.setFont("helvetica", "bold");
+  doc.text("Deskripsi", 15, y);
+  doc.text("Jumlah", 195, y, { align: "right" });
+  doc.line(15, y + 3, 195, y + 3);
+
+  doc.setFont("helvetica", "normal");
+  y += 11;
+
+  for (const item of items) {
+    if (y > 255) {
+      doc.addPage();
+      y = 20;
+    }
+
+    const lines = doc.splitTextToSize(
+      String(item.description || "Layanan"), 120
+    );
+    doc.text(lines, 15, y);
+    doc.text(rupiah(item.amount), 195, y, { align: "right" });
+    y += Math.max(8, lines.length * 5);
+  }
+
+  y += 8;
+  doc.line(105, y, 195, y);
+  y += 8;
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Total Tagihan", 120, y);
+  doc.text(rupiah(inv.amount_total), 195, y, { align: "right" });
+
+  y += 8;
+  doc.setFont("helvetica", "normal");
+  doc.text("Sudah Dibayar", 120, y);
+  doc.text(rupiah(inv.amount_paid), 195, y, { align: "right" });
+
+  y += 8;
+  doc.setFont("helvetica", "bold");
+  doc.text("Sisa Tagihan", 120, y);
+  doc.text(
+    rupiah(Number(inv.amount_total) - Number(inv.amount_paid)),
+    195, y, { align: "right" }
+  );
+
+  y += 16;
+  doc.setFont("helvetica", "normal");
+  doc.text("Status: " + inv.status, 15, y);
+  doc.text("Terima kasih atas kerja sama Anda.", 15, y + 8);
+
+  doc.save(`${inv.invoice_number}.pdf`);
+}
+
+window.renderInvoices = renderInvoices;
+window.createInvoiceFromOrder = createInvoiceFromOrder;
+window.downloadInvoicePdf = downloadInvoicePdf;
+
+
+async function addInvoicePayment(invoiceId, remaining) {
+  if (persistenceMode !== "cloud" || !authUser || !supabase) {
+    toast("Login ke Supabase terlebih dahulu.");
+    return;
+  }
+
+  const rawAmount = prompt(
+    "Sisa tagihan: " + formatInvoiceRp(remaining) +
+    "\nMasukkan nominal pembayaran:"
+  );
+
+  if (rawAmount === null) return;
+
+  const amount = Number(rawAmount.replace(/[^\d]/g, ""));
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    toast("Masukkan nominal Rupiah yang valid.");
+    return;
+  }
+
+  const method = prompt(
+    "Metode pembayaran (Transfer, Tunai, atau lainnya):",
+    "Transfer"
+  );
+
+  if (method === null) return;
+
+  const notes = prompt("Catatan pembayaran (opsional):", "");
+  if (notes === null) return;
+
+  const { error } = await supabase.rpc("record_invoice_payment", {
+    p_invoice_id: invoiceId,
+    p_amount: amount,
+    p_method: method,
+    p_notes: notes || null,
+  });
+
+  if (error) {
+    console.error("Pencatatan pembayaran gagal:", error);
+    toast("Pembayaran gagal: " + error.message);
+    return;
+  }
+
+  toast("Pembayaran berhasil dicatat.");
+  await renderInvoices();
+}
+
+window.addInvoicePayment = addInvoicePayment;
+
 
 // Sinkron antar tab browser
 window.addEventListener("storage", (e) => {

@@ -35,6 +35,9 @@
         <button class="nav" data-page="customers">♙ <span>Customer / Pabrik</span></button>
         <button class="nav" data-page="finance">Rp <span>Keuangan</span></button>
         <button class="nav" data-page="reports">▥ <span>Laporan</span></button>
+        <button class="nav" data-page="invoices" onclick="renderInvoices()">
+          ▤ <span>Invoice</span>
+        </button>
       </nav>
 
       <div class="side-bottom">
@@ -327,6 +330,87 @@
           </table>
         </div>
       </section>
+
+
+<!-- Page: Invoices -->
+<section id="invoices" class="page">
+  <div class="section-head">
+    <div>
+      <h2>Invoice & Pembayaran</h2>
+      <p>Buat tagihan dari order dan catat pembayaran pelanggan.</p>
+    </div>
+    <button class="primary" onclick="renderInvoices()">
+      ↻ Muat Ulang
+    </button>
+  </div>
+
+  <div class="stats compact">
+    <div class="stat">
+      <span>Total Invoice</span>
+      <strong id="invCount">0</strong>
+    </div>
+    <div class="stat">
+      <span>Total Tagihan</span>
+      <strong id="invTotal">Rp 0</strong>
+    </div>
+    <div class="stat">
+      <span>Total Terbayar</span>
+      <strong id="invPaid">Rp 0</strong>
+    </div>
+    <div class="stat">
+      <span>Sisa Piutang</span>
+      <strong id="invReceivable">Rp 0</strong>
+    </div>
+  </div>
+
+  <div class="card table-card" style="margin-bottom:16px">
+  <div class="card-head">
+    <div>
+      <h3>Order Belum Ditagih</h3>
+      <p>Pilih order untuk membuat invoice baru.</p>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Order</th>
+        <th>Supplier / Customer</th>
+        <th>PT Tujuan</th>
+        <th>Nilai Tagihan</th>
+        <th>Aksi</th>
+      </tr>
+    </thead>
+    <tbody id="invoiceOrderTable"></tbody>
+  </table>
+</div>
+
+
+  <div class="card table-card">
+    <table>
+      <thead>
+        <tr>
+          <th>No. Invoice</th>
+          <th>Order</th>
+          <th>Pelanggan</th>
+          <th>Total</th>
+          <th>Terbayar</th>
+          <th>Sisa</th>
+          <th>Status</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="invoiceTable">
+        <tr>
+          <td colspan="8" class="empty">
+            Memuat invoice...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
 
       <!-- Page: Reports -->
       <section id="reports" class="page">

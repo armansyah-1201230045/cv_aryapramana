@@ -38,7 +38,7 @@ Buka browser di `http://localhost:5173/`.
 3. Salin `.env.example` menjadi `.env.local`, lalu isi `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` dari **Project Settings → API**. Gunakan anon/publishable key saja; jangan pernah menaruh `service_role` key di aplikasi browser.
 4. Jalankan ulang `npm run dev`, lalu masuk dengan akun Supabase tersebut.
 
-Setiap order disimpan sebagai satu baris di tabel `orders`; kolom `customer`, `factory`, `stage`, dan `created_at` mudah dibaca dari Table Editor, sedangkan semua detail order ada pada kolom `data` (JSON). `app_state` hanya menyimpan nomor urut order. Row Level Security membatasi akses ke akun pemiliknya. Jika cloud masih berisi format lama di `app_state`, aplikasi memigrasikannya ke `orders` saat login; data lokal tetap ditanyakan sebelum diimpor bila belum ada data cloud. Pilihan **mode lokal** hanya menyimpan data pada browser/perangkat saat ini dan tidak melakukan sinkronisasi.
+Setiap order disimpan sebagai satu baris di tabel `orders`; kolom `customer`, `factory`, `stage`, dan `created_at` mudah dibaca dari Table Editor, sedangkan semua detail order ada pada kolom `data` (JSON). `app_state` hanya menyimpan nomor urut order. Invoice disimpan di `invoices` dan pembayaran di `invoice_payments`. Row Level Security membatasi akses ke akun pemiliknya. Jika cloud masih berisi format lama di `app_state`, aplikasi memigrasikannya ke `orders` saat login; data lokal tetap ditanyakan sebelum diimpor bila belum ada data cloud. Pilihan **mode lokal** hanya menyimpan data pada browser/perangkat saat ini dan tidak melakukan sinkronisasi.
 
 ## Publikasi ke GitHub Pages
 
