@@ -534,23 +534,6 @@
             <label><input type="radio" name="mode" value="Container" checked /> Container</label>
             <label><input type="radio" name="mode" value="Curah" /> Curah</label>
           </div>
-          <fieldset class="plain" id="containerBox">
-            <label>Jumlah Container
-              <select name="jumlah_container" id="jumlahContainer">
-                <option value="1" selected>1 Container (20FT)</option>
-                <option value="2">2 Container</option>
-                <option value="3">3 Container</option>
-                <option value="4">4 Container</option>
-                <option value="5">5 Container</option>
-                <option value="6">6 Container</option>
-                <option value="7">7 Container</option>
-                <option value="8">8 Container</option>
-                <option value="9">9 Container</option>
-                <option value="10">10 Container</option>
-              </select>
-            </label>
-            <div id="containerList" class="container-grid"></div>
-          </fieldset>
         </fieldset>
 
         <!-- 5. Dokumen -->
@@ -569,19 +552,22 @@
         <!-- 6. Trucking -->
         <fieldset class="form-section">
           <legend>6 · Trucking</legend>
-          <div class="two">
-            <label>No. Polisi Truk
-              <select name="plate" id="orderPlate"></select>
-            </label>
-            <label>Driver / Supir
-              <input name="driver" id="orderDriver" readonly placeholder="Otomatis sesuai nopol" />
-            </label>
-          </div>
-          <fieldset class="plain" id="manualPlateBox" hidden disabled>
-            <label>Nomor Polisi Manual
-              <input type="text" name="manual_plate" id="manualPlate" required placeholder="Contoh: L 1234 XX" />
-            </label>
+          <fieldset class="plain" id="containerBox">
+            <label>Jumlah Container
+              <select name="jumlah_container" id="jumlahContainer">
+                <option value="1" selected>1 Container (20FT)</option>
+                <option value="2">2 Container</option>
+                <option value="3">3 Container</option>
+                <option value="4">4 Container</option>
+                <option value="5">5 Container</option>
+                <option value="6">6 Container</option>
+                <option value="7">7 Container</option>
+                <option value="8">8 Container</option>
+                <option value="9">9 Container</option>
+                <option value="10">10 Container</option>
+              </select>
           </fieldset>
+          <div id="truckingList" class="container-grid"></div>
         </fieldset>
 
         <!-- 7. Biaya -->

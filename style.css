@@ -1220,6 +1220,22 @@ fieldset.plain[hidden] {
   gap: 0 11px;
 }
 
+.trucking-assignment {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid #e7ebf1;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.trucking-assignment > strong {
+  color: #5e6878;
+  font-size: 11px;
+}
+
 .order-summary {
   background: #172231;
   color: #e2e8f0;

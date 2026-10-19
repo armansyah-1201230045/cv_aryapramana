@@ -53,7 +53,10 @@ const reached = (o, key) => {
 
 function nextAction(o) {
   if (o.stage === "done") return null;
-  const noTruck = !o.plate ? "Tugaskan truk terlebih dahulu (klik Edit pada order)" : null;
+  const assignments = truckAssignmentsFor(o);
+  const noTruck = !assignments.length || assignments.some((assignment) => !assignment.plate)
+    ? "Tugaskan truk untuk setiap container terlebih dahulu (klik Edit pada order)"
+    : null;
   if (isIsland(o)) {
     switch (o.stage) {
       case "new": return { label: "Mulai Stuffing" };
@@ -99,6 +102,17 @@ function monthsAgo(m, day) {
 }
 const containerText = (o) =>
   o.mode === "Curah" ? "Curah" : o.containers.length ? `${o.containers.length} x 20FT` : "—";
+const truckAssignmentsFor = (o) =>
+  Array.isArray(o.truckingAssignments)
+    ? o.truckingAssignments
+    : o.plate
+      ? [{ container: o.containers?.[0] || "", plate: o.plate, driver: o.driver || "" }]
+      : [];
+const truckSummary = (o) =>
+  truckAssignmentsFor(o)
+    .filter((assignment) => assignment.plate)
+    .map((assignment) => `${assignment.plate}${assignment.driver ? ` · ${assignment.driver}` : ""}`)
+    .join(", ");
 
 function calc(o) {
   const purchase = num(o.buyPrice) * num(o.tonnage) * 1000;
@@ -482,7 +496,7 @@ function deleteOrder(id) {
 
 // ---------- Render: Orders ----------
 function searchText(o) {
-  return [o.id, o.customer, o.factory, o.origin, o.portOrigin, o.portDest, o.vessel, o.maritime, o.plate, o.driver, o.blNo, o.doNo, o.serviceType, ...(o.containers || [])]
+  return [o.id, o.customer, o.factory, o.origin, o.portOrigin, o.portDest, o.vessel, o.maritime, truckSummary(o), o.blNo, o.doNo, o.serviceType, ...(o.containers || [])]
     .join(" ")
     .toLowerCase();
 }
@@ -511,7 +525,7 @@ function renderOrders() {
       <td>${esc(o.origin)} → ${esc(isIsland(o) ? o.portDest : o.factoryAddress || o.factory)}</td>
       <td>${esc(o.routeType)}<br><small style="color:#64748b">${isIsland(o) ? "Kapal + Truck" : "Trucking"} · ${esc(o.mode)}</small></td>
       <td><b>${esc(o.factory)}</b></td>
-      <td>${fmtTon(o.tonnage)} · ${containerText(o)}<br><small style="color:#64748b">${o.plate ? `${esc(o.plate)} · ${esc(o.driver)}` : "Truk belum ditugaskan"}</small></td>
+      <td>${fmtTon(o.tonnage)} · ${containerText(o)}<br><small style="color:#64748b">${esc(truckSummary(o) || "Truk belum ditugaskan")}</small></td>
       <td>${getBadge(STAGE_LABEL[o.stage])}</td>
       <td><div class="act">
         <button class="btn-sm" data-action="detail" data-id="${o.id}">Detail</button>
@@ -648,8 +662,8 @@ function portInfo(o) {
     case "stuffing": return { port: o.portOrigin, status: "Gate In", note: `Stuffing selesai, menunggu loading ke ${o.vessel}` };
     case "sailing": return { port: o.portDest, status: "On Vessel", note: `Dalam pelayaran ${o.vessel} dari ${o.portOrigin}` };
     case "arrived": return { port: o.portDest, status: "Menunggu DO", note: "Jangan release sebelum DO valid" };
-    case "released": return { port: o.portDest, status: "Ready for Pickup", note: o.plate ? `DO valid • Truk ${o.plate} siap pickup` : "DO valid • Truk belum ditugaskan" };
-    case "trucking": return { port: o.portDest, status: "Gate Out", note: `Truk ${o.plate} menuju ${o.factory}` };
+    case "released": return { port: o.portDest, status: "Ready for Pickup", note: truckSummary(o) ? `DO valid • Truk ${truckSummary(o)} siap pickup` : "DO valid • Truk belum ditugaskan" };
+    case "trucking": return { port: o.portDest, status: "Gate Out", note: `Truk ${truckSummary(o) || "belum ditugaskan"} menuju ${o.factory}` };
     default: return null;
   }
 }
@@ -686,32 +700,34 @@ function truckStatus(o) {
 }
 
 function renderTrucking() {
-  const list = state.orders.filter((o) => o.stage !== "done" && (o.plate || o.stage === "released" || (!isIsland(o) && o.stage === "new")));
+  const list = state.orders.filter((o) => o.stage !== "done" && (truckAssignmentsFor(o).some((assignment) => assignment.plate) || o.stage === "released" || (!isIsland(o) && o.stage === "new")));
   $("#truckGrid").innerHTML = list.length
     ? list
         .map((o) => {
           const p = o.stage === "trucking" ? 55 : o.stage === "released" || (!isIsland(o) && o.stage === "new") ? 10 : 0;
           const canGo = (isIsland(o) && ["released", "trucking"].includes(o.stage)) || !isIsland(o);
           const lock = isIsland(o) && !reached(o, "released") ? `<div class="lock-note">🔒 Terkunci sampai DO divalidasi</div>` : "";
-          return `<div class="truck">
-        <div class="status-row"><h3>${esc(o.plate || "— Belum ada truk —")}</h3>${getBadge(truckStatus(o))}</div>
-        <p>Order: <b>${o.id}</b> · ${fmtTon(o.tonnage)} · ${containerText(o)}</p>
-        <p>Driver: ${o.driver ? `<button class="driver-link" type="button" data-action="driver" data-name="${esc(o.driver)}">${esc(o.driver)}</button>` : "—"}</p>
+          const assignments = truckAssignmentsFor(o);
+          const cards = assignments.length ? assignments : [{ plate: "", driver: "", container: "" }];
+          return cards.map((assignment, index) => `<div class="truck">
+        <div class="status-row"><h3>${esc(assignment.plate || "— Belum ada truk —")}</h3>${getBadge(truckStatus({ ...o, plate: assignment.plate }))}</div>
+        <p>Order: <b>${o.id}</b> · ${fmtTon(o.tonnage)} · ${containerText(o)}${assignment.container ? ` · ${esc(assignment.container)}` : ""}</p>
+        <p>Driver: ${assignment.driver ? `<button class="driver-link" type="button" data-action="driver" data-name="${esc(assignment.driver)}">${esc(assignment.driver)}</button>` : "—"}</p>
         <p>Pickup: ${esc(isIsland(o) ? o.portDest : o.origin)}</p>
         <p>Tujuan: <b>${esc(o.factory)}</b></p>
         <div class="progress"><i style="width:${p}%"></i></div>
         <small>${p}% perjalanan</small>
         ${lock}
         <div class="card-actions">
-          ${o.plate ? (canGo ? nextBtn(o) : "") : `<button class="btn-sm go" data-action="edit" data-id="${o.id}">Tugaskan Truk</button>`}
-          <button class="btn-sm" data-action="detail" data-id="${o.id}">Detail</button>
+          ${assignment.plate ? (canGo && index === 0 ? nextBtn(o) : "") : `<button class="btn-sm go" data-action="edit" data-id="${o.id}">Tugaskan Truk</button>`}
+          ${index === 0 ? `<button class="btn-sm" data-action="detail" data-id="${o.id}">Detail</button>` : ""}
         </div>
-      </div>`;
+      </div>`).join("");
         })
         .join("")
     : `<div class="card empty">Belum ada penugasan truk aktif.</div>`;
 
-  const busy = new Set(state.orders.filter((o) => o.stage !== "done" && o.plate).map((o) => o.plate));
+  const busy = new Set(state.orders.filter((o) => o.stage !== "done").flatMap((o) => truckAssignmentsFor(o).map((assignment) => assignment.plate).filter(Boolean)));
   $("#fleetAvailable").innerHTML =
     TRUCK_FLEET.filter((t) => !busy.has(t.plate))
       .map((t) => `<button class="fleet-chip" data-action="newWithPlate" data-plate="${esc(t.plate)}" title="Buat order dengan truk ini">🚚 ${esc(t.plate)} · ${esc(t.driver)}</button>`)
@@ -837,7 +853,8 @@ function exportCSV() {
   const head = ["Order", "Tanggal", "Supplier", "PT Tujuan", "Rute", "Layanan", "Tonase", "Harga Beli", "Harga Jual", "Kapal", "Voyage", "Port Asal", "Port Tujuan", "Container", "BL", "DO", "Nopol", "Driver", "Pendapatan", "Pembelian", "Biaya Logistik", "Laba", "Pembayaran", "Status"];
   const lines = state.orders.map((o) => {
     const c = calc(o);
-    return [o.id, fmtDate(o.createdAt), o.customer, o.factory, o.routeType, o.serviceType, o.tonnage, o.buyPrice, o.sellPrice, o.vessel, o.voyage, o.portOrigin, o.portDest, o.mode === "Curah" ? "Curah" : o.containers.join(" / "), o.blNo, o.doNo, o.plate, o.driver, c.revenue, c.purchase, c.logistics, c.profit, o.payment, STAGE_LABEL[o.stage]]
+    const assignments = truckAssignmentsFor(o).filter((assignment) => assignment.plate);
+    return [o.id, fmtDate(o.createdAt), o.customer, o.factory, o.routeType, o.serviceType, o.tonnage, o.buyPrice, o.sellPrice, o.vessel, o.voyage, o.portOrigin, o.portDest, o.mode === "Curah" ? "Curah" : o.containers.join(" / "), o.blNo, o.doNo, assignments.map((assignment) => assignment.plate).join(" / "), assignments.map((assignment) => assignment.driver).join(" / "), c.revenue, c.purchase, c.logistics, c.profit, o.payment, STAGE_LABEL[o.stage]]
       .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
       .join(",");
   });
@@ -856,8 +873,10 @@ function renderDashboard() {
   const island = active.filter(isIsland);
   const containers = island.reduce((s, o) => s + (o.mode === "Curah" ? 0 : o.containers.length), 0);
   const ships = new Set(island.filter((o) => ["stuffing", "sailing"].includes(o.stage)).map((o) => o.vessel + "|" + o.voyage));
-  const trucks = active.filter((o) => o.plate);
-  const onRoad = active.filter((o) => o.stage === "trucking");
+  const trucks = active.reduce((count, o) => count + truckAssignmentsFor(o).filter((assignment) => assignment.plate).length, 0);
+  const onRoad = active
+    .filter((o) => o.stage === "trucking")
+    .reduce((count, o) => count + truckAssignmentsFor(o).filter((assignment) => assignment.plate).length, 0);
   const unpaid = state.orders.filter((o) => o.payment !== "Lunas");
   const recv = unpaid.reduce((s, o) => s + calc(o).revenue, 0);
 
@@ -865,8 +884,8 @@ function renderDashboard() {
   $("#statAntarPulau").textContent = `${island.length} antar-pulau`;
   $("#statContainers").textContent = containers;
   $("#statActiveShips").textContent = `${ships.size} kapal aktif`;
-  $("#statTruckings").textContent = trucks.length;
-  $("#statTruckActive").textContent = `${onRoad.length} dalam perjalanan`;
+  $("#statTruckings").textContent = trucks;
+  $("#statTruckActive").textContent = `${onRoad} dalam perjalanan`;
   $("#statReceivables").textContent = fmtShort(recv);
   $("#statInvoices").textContent = `${unpaid.length} invoice`;
   $("#notifCount").textContent = state.orders.filter((o) => o.stage === "arrived").length;
@@ -933,7 +952,9 @@ function renderOrderDetail() {
         ${isIsland(o) ? `BL: ${esc(o.blNo)} · DO: ${esc(o.doNo)} ${o.doValid ? "✅" : "⏳"}` : "Tanpa BL/DO"}
       </div>
       <div class="detail-box"><h4>Trucking</h4>
-        ${o.plate ? `${esc(o.plate)} · <button class="driver-link" type="button" data-action="driver" data-name="${esc(o.driver)}">${esc(o.driver)}</button>` : "Truk belum ditugaskan"}<br>
+        ${truckAssignmentsFor(o).filter((assignment) => assignment.plate).map((assignment) =>
+          `${assignment.container ? `${esc(assignment.container)}: ` : ""}${esc(assignment.plate)} · <button class="driver-link" type="button" data-action="driver" data-name="${esc(assignment.driver)}">${esc(assignment.driver || "Driver belum diisi")}</button>`
+        ).join("<br>") || "Truk belum ditugaskan"}<br>
         Status: ${truckStatus(o)}
       </div>
       <div class="detail-box" style="grid-column:1/-1"><h4>Keuangan</h4>
@@ -961,14 +982,16 @@ function showDetail(id) {
 // ---------- Driver Modal ----------
 function showDriverHistory(name) {
   if (!name) return;
-  const orders = state.orders.filter((o) => (o.driver || "").toLowerCase() === name.toLowerCase());
+  const matchingAssignments = (o) => truckAssignmentsFor(o).filter((assignment) => (assignment.driver || "").toLowerCase() === name.toLowerCase());
+  const orders = state.orders.filter((o) => matchingAssignments(o).length);
   const latest = orders[0];
-  const fleet = TRUCK_FLEET.find((t) => t.driver.toLowerCase() === name.toLowerCase()) || FLEET_MAP[latest?.plate] || {};
+  const latestAssignment = latest && matchingAssignments(latest)[0];
+  const fleet = TRUCK_FLEET.find((t) => t.driver.toLowerCase() === name.toLowerCase()) || FLEET_MAP[latestAssignment?.plate] || {};
   const activeOrder = orders.find((o) => o.stage !== "done");
   const status = activeOrder ? truckStatus(activeOrder) : "Tersedia";
 
   $("#driverModalName").textContent = name;
-  $("#driverModalPlate").textContent = `Nopol: ${latest?.plate || fleet.plate || "—"} · ${fleet.type || "Armada Ekspedisi"}`;
+  $("#driverModalPlate").textContent = `Nopol: ${latestAssignment?.plate || fleet.plate || "—"} · ${fleet.type || "Armada Ekspedisi"}`;
   $("#driverModalStatus").innerHTML = getBadge(status);
   $("#driverModalPhone").textContent = fleet.phone || "—";
   $("#driverModalTrips").textContent = `${orders.length} ritase`;
@@ -1006,28 +1029,74 @@ function render() {
    ========================================================= */
 const form = $("#orderForm");
 
-function buildPlateOptions(selected = "") {
-  const busy = new Map(state.orders.filter((o) => o.stage !== "done" && o.plate && o.id !== editingId).map((o) => [o.plate, o.id]));
-  const opts = [`<option value="">— Belum ditugaskan —</option>`];
-  TRUCK_FLEET.forEach((t) => {
-    const b = busy.get(t.plate);
-    opts.push(`<option value="${t.plate}">${t.plate} · ${t.driver}${b ? ` (sedang ${b})` : ""}</option>`);
+function buildTruckOptions(selected = "") {
+  const busy = new Map();
+  state.orders
+    .filter((o) => o.stage !== "done" && o.id !== editingId)
+    .forEach((o) => truckAssignmentsFor(o).forEach(({ plate }) => plate && busy.set(plate, o.id)));
+  const options = [`<option value="">— Belum ditugaskan —</option>`];
+  TRUCK_FLEET.forEach((truck) => {
+    const orderId = busy.get(truck.plate);
+    options.push(`<option value="${esc(truck.plate)}">${esc(truck.plate)} · ${esc(truck.driver)}${orderId ? ` (sedang ${orderId})` : ""}</option>`);
   });
-  opts.push(`<option value="manual">+ Isi Nomor Polisi Sendiri</option>`);
-  $("#orderPlate").innerHTML = opts.join("");
-  $("#orderPlate").value = selected;
+  options.push(`<option value="manual">+ Isi Nomor Polisi Sendiri</option>`);
+  return `${options.join("")}<option value="${esc(selected)}" hidden>${esc(selected)}</option>`;
 }
 
-function buildContainerInputs(values) {
-  const box = $("#containerList");
-  const n = parseInt($("#jumlahContainer").value) || 1;
-  const current = values || [...box.querySelectorAll("input")].map((i) => i.value);
+function buildContainerInputs(values, assignments) {
+  const box = $("#truckingList");
+  const currentValues = values || [...box.querySelectorAll("[name^='container']")].map((input) => input.value);
+  const currentAssignments = assignments || [...box.querySelectorAll(".trucking-assignment")].map((row) => ({
+    plate: row.querySelector("[name^='truck_plate']").value,
+    driver: row.querySelector("[name^='truck_driver']").value,
+    manualPlate: row.querySelector("[name^='truck_manual_plate']").value,
+  }));
+  const containerMode = form.elements.mode.value !== "Curah";
+  const count = containerMode ? parseInt($("#jumlahContainer").value, 10) || 1 : 1;
   box.innerHTML = "";
-  for (let i = 1; i <= n; i++) {
-    const label = document.createElement("label");
-    const val = current[i - 1] || `MSCU${Math.floor(1000000 + Math.random() * 9000000)}`;
-    label.innerHTML = `Container ${i}<input type="text" name="container${i}" value="${val}" placeholder="Contoh: MSCU12345${i}" style="text-transform:uppercase" />`;
-    box.appendChild(label);
+
+  for (let i = 1; i <= count; i++) {
+    const assignment = currentAssignments[i - 1] || {};
+    const row = document.createElement("div");
+    row.className = "trucking-assignment";
+    row.innerHTML = `
+      <strong>Trucking ${i}${containerMode ? ` · Container ${i}` : " · Curah"}</strong>
+      ${containerMode ? `<label>Nomor Container
+        <input type="text" name="container${i}" value="${esc(currentValues[i - 1] || assignment.container || `MSCU${Math.floor(1000000 + Math.random() * 9000000)}`)}" placeholder="Contoh: MSCU12345${i}" style="text-transform:uppercase" />
+      </label>` : ""}
+      <label>No. Polisi Truk
+        <select name="truck_plate${i}">${buildTruckOptions(assignment.plate || "")}</select>
+      </label>
+      <fieldset class="plain manual-truck" hidden disabled>
+        <label>Nomor Polisi Manual
+          <input type="text" name="truck_manual_plate${i}" value="${esc(assignment.manualPlate || (assignment.plate && !FLEET_MAP[assignment.plate] ? assignment.plate : ""))}" placeholder="Contoh: L 1234 XX" />
+        </label>
+      </fieldset>
+      <label>Driver / Supir
+        <input type="text" name="truck_driver${i}" value="${esc(assignment.driver || FLEET_MAP[assignment.plate]?.driver || "")}" ${assignment.plate && !FLEET_MAP[assignment.plate] ? "" : "readonly"} placeholder="${assignment.plate && !FLEET_MAP[assignment.plate] ? "Ketik nama driver" : "Otomatis sesuai nopol"}" />
+      </label>`;
+    box.appendChild(row);
+    const select = row.querySelector(`[name="truck_plate${i}"]`);
+    select.value = assignment.plate && FLEET_MAP[assignment.plate] ? assignment.plate : assignment.plate ? "manual" : "";
+    updateTruckRow(row);
+  }
+}
+
+function updateTruckRow(row) {
+  const select = row.querySelector("[name^='truck_plate']");
+  const manualBox = row.querySelector(".manual-truck");
+  const manual = select.value === "manual";
+  const driver = row.querySelector("[name^='truck_driver']");
+  if (driver.dataset.manualMode === "true" && !manual) driver.dataset.manualValue = driver.value;
+  manualBox.hidden = !manual;
+  manualBox.disabled = !manual;
+  driver.readOnly = !manual;
+  driver.placeholder = manual ? "Ketik nama driver" : "Otomatis sesuai nopol";
+  driver.dataset.manualMode = String(manual);
+  if (manual) {
+    driver.value = driver.dataset.manualValue || driver.value;
+  } else {
+    driver.value = FLEET_MAP[select.value]?.driver || "";
   }
 }
 
@@ -1037,20 +1106,6 @@ function updateFormVisibility() {
   $("#fsDocs").disabled = !island;
   $("#fsShipCost").disabled = !island;
   $("#containerBox").disabled = form.elements.mode.value === "Curah";
-
-  const manual = $("#orderPlate").value === "manual";
-  const mBox = $("#manualPlateBox");
-  mBox.hidden = !manual;
-  mBox.disabled = !manual;
-  const drv = $("#orderDriver");
-  if (manual) {
-    drv.readOnly = false;
-    drv.placeholder = "Ketik nama driver";
-  } else {
-    drv.readOnly = true;
-    drv.placeholder = "Otomatis sesuai nopol";
-    drv.value = FLEET_MAP[$("#orderPlate").value]?.driver || "";
-  }
   updateSummary();
 }
 
@@ -1074,9 +1129,11 @@ function openOrderForm(id = null, preset = {}) {
   const o = id ? findOrder(id) : null;
   $("#orderModalTitle").textContent = o ? `Edit Order ${o.id}` : "Tambah Order";
   $("#orderSubmitBtn").textContent = o ? "Simpan Perubahan" : "Simpan Order";
-
-  const isFleet = o && FLEET_MAP[o.plate];
-  buildPlateOptions(o ? (o.plate ? (isFleet ? o.plate : "manual") : "") : preset.plate || "");
+  const assignments = o
+    ? truckAssignmentsFor(o)
+    : preset.plate
+      ? [{ plate: preset.plate, driver: FLEET_MAP[preset.plate]?.driver || "" }]
+      : [];
 
   const set = (name, val) => form.elements[name] && (form.elements[name].value = val ?? "");
 
@@ -1091,8 +1148,7 @@ function openOrderForm(id = null, preset = {}) {
     set("cost_do", o.costs.doFee || ""); set("cost_trucking", o.costs.trucking || ""); set("cost_other", o.costs.other || "");
     set("payment", o.payment); set("notes", o.notes);
     set("jumlah_container", o.containers.length ? String(Math.min(o.containers.length, 10)) : "1");
-    buildContainerInputs(o.containers);
-    if (o.plate && !isFleet) set("manual_plate", o.plate);
+    buildContainerInputs(o.containers, assignments);
   } else {
     // Nilai bawaan untuk mempercepat pengisian
     set("service_type", "Kopra + Shipping + Trucking (Lengkap)");
@@ -1104,21 +1160,33 @@ function openOrderForm(id = null, preset = {}) {
     set("port_dest", "Tanjung Perak");
     set("mode", "Container");
     set("jumlah_container", "1");
-    buildContainerInputs([`MSCU${Math.floor(1000000 + Math.random() * 9000000)}`]);
+    buildContainerInputs([`MSCU${Math.floor(1000000 + Math.random() * 9000000)}`], assignments);
   }
 
   updateFormVisibility();
-  if (o && o.plate && !isFleet) $("#orderDriver").value = o.driver || "";
   openModal("orderModal");
   setTimeout(() => form.elements.customer.focus(), 50);
 }
 window.openOrderForm = openOrderForm;
 
 form.addEventListener("change", (e) => {
-  if (["route_type", "mode", "plate"].includes(e.target.name)) updateFormVisibility();
+  if (e.target.name === "route_type") updateFormVisibility();
+  if (e.target.name === "mode") {
+    buildContainerInputs();
+    updateFormVisibility();
+  }
   if (e.target.id === "jumlahContainer") buildContainerInputs();
+  if (e.target.matches("[name^='truck_plate']")) {
+    updateTruckRow(e.target.closest(".trucking-assignment"));
+    updateSummary();
+  }
 });
 form.addEventListener("input", updateSummary);
+form.addEventListener("input", (e) => {
+  if (e.target.matches("[name^='truck_driver']")) {
+    e.target.dataset.manualValue = e.target.value;
+  }
+});
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
@@ -1128,24 +1196,24 @@ form.addEventListener("submit", (e) => {
   const island = routeType !== "Domestik";
   const mode = g("mode") || "Container";
 
-  let plate = g("plate");
-  let driver = g("driver");
-  if (plate === "manual") plate = g("manual_plate").toUpperCase();
-  if (plate && !driver) driver = FLEET_MAP[plate]?.driver || "Driver Ekspedisi";
-  if (!plate) driver = "";
-
+  const count = mode === "Curah" ? 1 : parseInt(g("jumlah_container"), 10) || 1;
   const containers = [];
-  if (island && mode === "Container") {
-    const n = parseInt(g("jumlah_container")) || 1;
-    for (let i = 1; i <= n; i++) {
-      let c = g(`container${i}`).toUpperCase();
-      if (!c) c = `MSCU${Math.floor(1000000 + Math.random() * 9000000)}`;
-      containers.push(c);
+  const truckingAssignments = [];
+  for (let i = 1; i <= count; i++) {
+    if (mode !== "Curah") {
+      const container = g(`container${i}`).toUpperCase() || `MSCU${Math.floor(1000000 + Math.random() * 9000000)}`;
+      containers.push(container);
     }
-    if (containers.length === 0) {
-      containers.push(`MSCU${Math.floor(1000000 + Math.random() * 9000000)}`);
-    }
+    let plate = g(`truck_plate${i}`);
+    let driver = g(`truck_driver${i}`);
+    if (plate === "manual") plate = g(`truck_manual_plate${i}`).toUpperCase();
+    if (plate && !driver) driver = FLEET_MAP[plate]?.driver || "Driver Ekspedisi";
+    if (!plate) driver = "";
+    truckingAssignments.push({ container: containers[i - 1] || "", plate, driver });
   }
+  const primaryAssignment = truckingAssignments.find((assignment) => assignment.plate) || truckingAssignments[0] || {};
+  const plate = primaryAssignment.plate || "";
+  const driver = primaryAssignment.driver || "";
 
   const existing = editingId ? findOrder(editingId) : null;
   let id = existing?.id;
@@ -1174,12 +1242,13 @@ form.addEventListener("submit", (e) => {
     portDest: island ? g("port_dest") : "",
     etd: island ? g("etd") : "",
     mode,
-    containers: mode === "Curah" ? [] : containers,
+    containers,
     blNo: island ? g("bl_no") || `BL-${n4}-001` : "",
     doNo: island ? g("do_no") || `DO-${n4}-001` : "",
     doValid: existing?.doValid || false,
     plate,
     driver,
+    truckingAssignments,
     serviceFee: num(g("service_fee")),
     costs: {
       freight: island ? num(g("cost_freight")) : 0,
