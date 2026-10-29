@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { jsPDF } from "jspdf";
+import { generateNotaPDF } from "./notaPdfGenerator.js";
 
 "use strict";
 
@@ -1615,101 +1615,85 @@ async function downloadInvoicePdf(invoiceId) {
     return;
   }
 
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
   const snapshot = inv.order_snapshot || {};
-  const items = Array.isArray(snapshot.items) ? snapshot.items : [];
+  const rawItems = Array.isArray(snapshot.items) && snapshot.items.length
+    ? snapshot.items
+    : Array.isArray(inv.items) && inv.items.length
+      ? inv.items
+      : [];
 
-  const rupiah = value =>
-    "Rp " + new Intl.NumberFormat("id-ID", {
-      maximumFractionDigits: 0,
-    }).format(Number(value) || 0);
-
-  const dateText = value =>
-    value ? new Date(value + "T00:00:00").toLocaleDateString("id-ID")
-      : "-";
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(19);
-  doc.text("CV ARYA PRAMANA", 15, 20);
-
-  doc.setFontSize(11);
-  doc.text("INVOICE", 195, 20, { align: "right" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.text("Trade - Shipping - Trucking", 15, 27);
-  doc.text("No: " + inv.invoice_number, 195, 28, { align: "right" });
-
-  doc.line(15, 34, 195, 34);
-
-  doc.setFont("helvetica", "bold");
-  doc.text("Ditagihkan kepada", 15, 43);
-  doc.text("Informasi Invoice", 115, 43);
-
-  doc.setFont("helvetica", "normal");
-  doc.text(String(inv.customer_name || "-"), 15, 50);
-  doc.text("Order: " + String(inv.order_id), 115, 50);
-  doc.text("Tanggal: " + dateText(inv.issued_at), 115, 57);
-  doc.text("Jatuh tempo: " + dateText(inv.due_date), 115, 64);
-
-  doc.text("PT tujuan: " + String(inv.factory_name || "-"), 15, 57);
-  doc.text("Asal: " + String(snapshot.origin || "-"), 15, 64);
-  doc.text(
-    "Truk: " + String(snapshot.plate || "-") +
-      " | Driver: " + String(snapshot.driver || "-"),
-    15, 71
-  );
-
-  let y = 86;
-  doc.setFont("helvetica", "bold");
-  doc.text("Deskripsi", 15, y);
-  doc.text("Jumlah", 195, y, { align: "right" });
-  doc.line(15, y + 3, 195, y + 3);
-
-  doc.setFont("helvetica", "normal");
-  y += 11;
-
-  for (const item of items) {
-    if (y > 255) {
-      doc.addPage();
-      y = 20;
+  const formatDateDisplay = (val) => {
+    if (!val) {
+      const d = new Date();
+      return `${String(d.getDate()).padStart(2, "0")}-${MONTHS[d.getMonth()] || "Okt"}-${String(d.getFullYear()).slice(-2)}`;
     }
+    const d = new Date(val.includes("T") ? val : val + "T00:00:00");
+    if (isNaN(d.getTime())) return String(val);
+    const day = String(d.getDate()).padStart(2, "0");
+    const m = MONTHS[d.getMonth()] || "Okt";
+    const y = String(d.getFullYear()).slice(-2);
+    return `${day}-${m}-${y}`;
+  };
 
-    const lines = doc.splitTextToSize(
-      String(item.description || "Layanan"), 120
-    );
-    doc.text(lines, 15, y);
-    doc.text(rupiah(item.amount), 195, y, { align: "right" });
-    y += Math.max(8, lines.length * 5);
-  }
+  const formatItemDate = (val) => {
+    if (!val) {
+      const d = new Date();
+      return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+    }
+    const d = new Date(val.includes("T") ? val : val + "T00:00:00");
+    if (isNaN(d.getTime())) return String(val);
+    const day = String(d.getDate()).padStart(2, "0");
+    const mo = String(d.getMonth() + 1).padStart(2, "0");
+    return `${day}/${mo}/${d.getFullYear()}`;
+  };
 
-  y += 8;
-  doc.line(105, y, 195, y);
-  y += 8;
+  const resolveCommodity = (desc, explicitName) => {
+    const raw = explicitName || desc || "";
+    const lower = String(raw).toLowerCase();
+    if (lower.includes("trucking") || lower.includes("logistik")) return "TRUCKING";
+    if (lower.includes("kopra")) return "KOPRA";
+    if (lower.includes("kemiri")) return "KEMIRI";
+    return explicitName || desc || "KOPRA";
+  };
 
-  doc.setFont("helvetica", "bold");
-  doc.text("Total Tagihan", 120, y);
-  doc.text(rupiah(inv.amount_total), 195, y, { align: "right" });
+  const items = rawItems.length
+    ? rawItems.map((item, idx) => {
+        const isSub = item.no === null || item.no === "";
+        return {
+          no: item.no !== undefined ? item.no : (idx + 1),
+          tanggal: isSub ? (item.tanggal || "") : (item.tanggal || formatItemDate(inv.issued_at)),
+          no_pol: isSub ? (item.no_pol || "") : (item.no_pol || snapshot.plate || "-"),
+          nama_barang: isSub ? (item.nama_barang || "") : resolveCommodity(item.description, item.nama_barang),
+          container_no: item.container_no || (snapshot.containers && snapshot.containers[idx]) || (snapshot.containers && snapshot.containers[0]) || (snapshot.mode === "Curah" ? "CURAH" : "-"),
+          tujuan: isSub ? (item.tujuan || "") : (item.tujuan || snapshot.factory || snapshot.factoryAddress || "-"),
+          harga: Number(item.harga ?? item.amount ?? 0),
+        };
+      })
+    : [
+        {
+          no: 1,
+          tanggal: formatItemDate(inv.issued_at),
+          no_pol: snapshot.plate || "-",
+          nama_barang: resolveCommodity(inv.description),
+          container_no: (snapshot.containers && snapshot.containers[0]) || (snapshot.mode === "Curah" ? "CURAH" : "-"),
+          tujuan: snapshot.factory || snapshot.factoryAddress || "-",
+          harga: Number(inv.amount_total || 0),
+        },
+      ];
 
-  y += 8;
-  doc.setFont("helvetica", "normal");
-  doc.text("Sudah Dibayar", 120, y);
-  doc.text(rupiah(inv.amount_paid), 195, y, { align: "right" });
+  const dataNota = {
+    kepada_yth: inv.customer_name || snapshot.customer || snapshot.factory || "-",
+    alamat: snapshot.factoryAddress || snapshot.origin || "-",
+    nota_no: inv.invoice_number || `AP/INV/${inv.id || "001"}`,
+    tgl_nota: formatDateDisplay(inv.issued_at),
+    dp_container: Number(inv.amount_paid || 0),
+    bank_name: inv.bank_name || "BCA",
+    bank_an: inv.bank_an || "TRIANA DEVI",
+    bank_rek: inv.bank_rek || "429.000.688.6",
+    items,
+  };
 
-  y += 8;
-  doc.setFont("helvetica", "bold");
-  doc.text("Sisa Tagihan", 120, y);
-  doc.text(
-    rupiah(Number(inv.amount_total) - Number(inv.amount_paid)),
-    195, y, { align: "right" }
-  );
-
-  y += 16;
-  doc.setFont("helvetica", "normal");
-  doc.text("Status: " + inv.status, 15, y);
-  doc.text("Terima kasih atas kerja sama Anda.", 15, y + 8);
-
-  doc.save(`${inv.invoice_number}.pdf`);
+  generateNotaPDF(dataNota);
 }
 
 window.renderInvoices = renderInvoices;
