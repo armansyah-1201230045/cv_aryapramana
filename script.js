@@ -139,6 +139,7 @@ function getBadge(status) {
 // ---------- Seed Data ----------
 function seedState() {
   const mk = (o) => ({
+    commodity: "Kopra",
     factoryAddress: "", voyage: "", etd: "", blNo: "", doNo: "", plate: "", driver: "", notes: "",
     serviceFee: 0, payment: "Belum Lunas", doValid: false, containers: [], mode: "Container",
     costs: { freight: 0, thc: 0, doFee: 0, trucking: 0, other: 0 },
@@ -220,7 +221,12 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const p = JSON.parse(raw);
-      if (Array.isArray(p.orders)) return { seq: p.seq || 268, orders: p.orders };
+      if (Array.isArray(p.orders)) {
+        p.orders.forEach((o) => {
+          if (!o.commodity) o.commodity = "Kopra";
+        });
+        return { seq: p.seq || 268, orders: p.orders };
+      }
     }
   } catch (e) {
     console.error("Gagal memuat data:", e);
@@ -312,9 +318,12 @@ async function activateCloudSession(user) {
     }, 268);
     state = {
       seq: Math.max(record?.state?.seq || 268, maxId),
-      orders: orderRows.map((row) => row.data),
+      orders: orderRows.map((row) => ({ commodity: "Kopra", ...row.data })),
     };
   } else if (record?.state && Array.isArray(record.state.orders) && record.state.orders.length) {
+    record.state.orders.forEach((o) => {
+      if (!o.commodity) o.commodity = "Kopra";
+    });
     state = { seq: record.state.seq || 268, orders: record.state.orders };
     const { error: migrateError } = await supabase.rpc("sync_my_orders", {
       p_orders: state.orders,
@@ -496,7 +505,7 @@ function deleteOrder(id) {
 
 // ---------- Render: Orders ----------
 function searchText(o) {
-  return [o.id, o.customer, o.factory, o.origin, o.portOrigin, o.portDest, o.vessel, o.maritime, truckSummary(o), o.blNo, o.doNo, o.serviceType, ...(o.containers || [])]
+  return [o.id, o.customer, o.commodity || "Kopra", o.factory, o.origin, o.portOrigin, o.portDest, o.vessel, o.maritime, truckSummary(o), o.blNo, o.doNo, o.serviceType, ...(o.containers || [])]
     .join(" ")
     .toLowerCase();
 }
@@ -521,7 +530,7 @@ function renderOrders() {
           (o) => `
     <tr class="${o.id === lastSavedId ? "row-new" : ""}">
       <td class="id">${o.id}<br><small style="color:#94a3b8;font-weight:400">${fmtDate(o.createdAt)}</small></td>
-      <td><b>${esc(o.customer)}</b><br><small style="color:#64748b">${esc(o.serviceType)}</small></td>
+      <td><b>${esc(o.customer)}</b><br><small style="color:#64748b">${esc(o.commodity || "Kopra")} · ${esc(o.serviceType)}</small></td>
       <td>${esc(o.origin)} → ${esc(isIsland(o) ? o.portDest : o.factoryAddress || o.factory)}</td>
       <td>${esc(o.routeType)}<br><small style="color:#64748b">${isIsland(o) ? "Kapal + Truck" : "Trucking"} · ${esc(o.mode)}</small></td>
       <td><b>${esc(o.factory)}</b></td>
@@ -929,7 +938,7 @@ function renderOrderDetail() {
     <div class="detail-head">
       <div>
         <h2>${o.id}</h2>
-        <p class="muted">${esc(o.customer)} → <b>${esc(o.factory)}</b> · ${esc(o.serviceType)} · ${fmtDate(o.createdAt)}</p>
+        <p class="muted">${esc(o.customer)} → <b>${esc(o.factory)}</b> · ${esc(o.commodity || "Kopra")} · ${esc(o.serviceType)} · ${fmtDate(o.createdAt)}</p>
       </div>
       ${getBadge(STAGE_LABEL[o.stage])}
     </div>
@@ -938,9 +947,10 @@ function renderOrderDetail() {
     </div>
     <div class="detail-grid">
       <div class="detail-box"><h4>Komoditas</h4>
+        Jenis: <b>${esc(o.commodity || "Kopra")}</b><br>
         Tonase: <b>${fmtTon(o.tonnage)}</b><br>
         Harga beli: ${fmtRp(num(o.buyPrice))}/kg · jual: ${fmtRp(num(o.sellPrice))}/kg<br>
-        Margin kopra: <b>${fmtRp(c.kopraMargin)}</b>
+        Margin: <b>${fmtRp(c.kopraMargin)}</b>
       </div>
       <div class="detail-box"><h4>${isIsland(o) ? "Shipping" : "Rute Domestik"}</h4>
         ${isIsland(o)
@@ -1100,6 +1110,20 @@ function updateTruckRow(row) {
   }
 }
 
+function updateCommodityVisibility() {
+  const comm = form.elements.commodity?.value;
+  const isCustom = comm === "Custom";
+  const wrap = $("#customCommodityWrapper");
+  const input = $("#customCommodity");
+  if (wrap) {
+    wrap.hidden = !isCustom;
+    wrap.style.display = isCustom ? "block" : "none";
+  }
+  if (input) {
+    input.required = isCustom;
+  }
+}
+
 function updateFormVisibility() {
   const island = form.elements.route_type.value !== "Domestik";
   $("#fsShipping").disabled = !island;
@@ -1138,6 +1162,14 @@ function openOrderForm(id = null, preset = {}) {
   const set = (name, val) => form.elements[name] && (form.elements[name].value = val ?? "");
 
   if (o) {
+    const commVal = o.commodity || "Kopra";
+    if (["Kopra", "Cengkeh", "Minyak"].includes(commVal)) {
+      set("commodity", commVal);
+      set("custom_commodity", "");
+    } else {
+      set("commodity", "Custom");
+      set("custom_commodity", commVal === "Custom" ? "" : commVal);
+    }
     set("customer", o.customer); set("factory", o.factory); set("service_type", o.serviceType);
     set("factory_address", o.factoryAddress); set("origin", o.origin); set("route_type", o.routeType);
     set("tonnage", o.tonnage); set("buy_price", o.buyPrice || ""); set("sell_price", o.sellPrice || "");
@@ -1151,6 +1183,8 @@ function openOrderForm(id = null, preset = {}) {
     buildContainerInputs(o.containers, assignments);
   } else {
     // Nilai bawaan untuk mempercepat pengisian
+    set("commodity", "Kopra");
+    set("custom_commodity", "");
     set("service_type", "Kopra + Shipping + Trucking (Lengkap)");
     set("route_type", "Antar-Pulau");
     set("maritime", "PT Nusantara Maritime");
@@ -1163,6 +1197,7 @@ function openOrderForm(id = null, preset = {}) {
     buildContainerInputs([`MSCU${Math.floor(1000000 + Math.random() * 9000000)}`], assignments);
   }
 
+  updateCommodityVisibility();
   updateFormVisibility();
   openModal("orderModal");
   setTimeout(() => form.elements.customer.focus(), 50);
@@ -1170,6 +1205,12 @@ function openOrderForm(id = null, preset = {}) {
 window.openOrderForm = openOrderForm;
 
 form.addEventListener("change", (e) => {
+  if (e.target.name === "commodity") {
+    updateCommodityVisibility();
+    if (e.target.value === "Custom") {
+      $("#customCommodity")?.focus();
+    }
+  }
   if (e.target.name === "route_type") updateFormVisibility();
   if (e.target.name === "mode") {
     buildContainerInputs();
@@ -1195,6 +1236,8 @@ form.addEventListener("submit", (e) => {
   const routeType = g("route_type") || "Antar-Pulau";
   const island = routeType !== "Domestik";
   const mode = g("mode") || "Container";
+  const commChoice = g("commodity") || "Kopra";
+  const commodity = commChoice === "Custom" ? (g("custom_commodity") || "Custom") : commChoice;
 
   const count = mode === "Curah" ? 1 : parseInt(g("jumlah_container"), 10) || 1;
   const containers = [];
@@ -1227,6 +1270,7 @@ form.addEventListener("submit", (e) => {
     id,
     createdAt: existing?.createdAt || new Date().toISOString(),
     customer: g("customer"),
+    commodity,
     factory: g("factory"),
     factoryAddress: g("factory_address"),
     serviceType: g("service_type"),
@@ -1341,12 +1385,14 @@ $("#btnResetData").addEventListener("click", () => {
 
 function invoiceBillableItems(order) {
   const items = [];
+  const comm = order.commodity || "Kopra";
   const kopraSales =
     num(order.sellPrice) * num(order.tonnage) * 1000;
 
   if (kopraSales > 0) {
     items.push({
-      description: "Penjualan kopra",
+      description: `Penjualan ${comm.toLowerCase()}`,
+      nama_barang: comm,
       quantity: num(order.tonnage),
       unit: "ton",
       unit_price: num(order.sellPrice) * 1000,
@@ -1357,6 +1403,7 @@ function invoiceBillableItems(order) {
   if (num(order.serviceFee) > 0) {
     items.push({
       description: "Jasa trucking / logistik",
+      nama_barang: comm,
       quantity: 1,
       unit: "layanan",
       unit_price: num(order.serviceFee),
@@ -1555,6 +1602,7 @@ async function createInvoiceFromOrder(orderId) {
   const snapshot = {
     order_id: order.id,
     customer: order.customer,
+    commodity: order.commodity || "Kopra",
     factory: order.factory,
     factoryAddress: order.factoryAddress,
     origin: order.origin,
@@ -1574,7 +1622,7 @@ async function createInvoiceFromOrder(orderId) {
     invoice_number: invoiceNumber,
     issued_at: today,
     due_date: dueDate || null,
-    customer_name: order.factory || order.customer,
+    customer_name: order.customer || order.factory,
     factory_name: order.factory || "",
     description: "Tagihan berdasarkan order " + order.id,
     order_snapshot: snapshot,
@@ -1616,6 +1664,8 @@ async function downloadInvoicePdf(invoiceId) {
   }
 
   const snapshot = inv.order_snapshot || {};
+  const order = (typeof state !== "undefined" && state.orders) ? findOrder(inv.order_id || snapshot.order_id) : null;
+  const snapshotComm = snapshot.commodity || order?.commodity || "";
   const rawItems = Array.isArray(snapshot.items) && snapshot.items.length
     ? snapshot.items
     : Array.isArray(inv.items) && inv.items.length
@@ -1648,12 +1698,20 @@ async function downloadInvoicePdf(invoiceId) {
   };
 
   const resolveCommodity = (desc, explicitName) => {
-    const raw = explicitName || desc || "";
+    if (explicitName && String(explicitName).trim()) {
+      return String(explicitName).trim();
+    }
+    if (snapshotComm && String(snapshotComm).trim()) {
+      return String(snapshotComm).trim();
+    }
+    const raw = desc || "";
     const lower = String(raw).toLowerCase();
     if (lower.includes("trucking") || lower.includes("logistik")) return "TRUCKING";
-    if (lower.includes("kopra")) return "KOPRA";
-    if (lower.includes("kemiri")) return "KEMIRI";
-    return explicitName || desc || "KOPRA";
+    if (lower.includes("cengkeh")) return "Cengkeh";
+    if (lower.includes("minyak")) return "Minyak";
+    if (lower.includes("kopra")) return "Kopra";
+    if (lower.includes("kemiri")) return "Kemiri";
+    return raw || "Kopra";
   };
 
   const items = rawItems.length

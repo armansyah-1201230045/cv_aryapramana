@@ -491,8 +491,19 @@
 
         <!-- 2. Komoditas -->
         <fieldset class="form-section">
-          <legend>2 · Komoditas Kopra</legend>
-          <div class="three">
+          <legend>2 · Komoditas</legend>
+          <div class="two">
+            <label>Komoditas
+              <select name="commodity" id="orderCommodity">
+                <option value="Kopra" selected>Kopra</option>
+                <option value="Cengkeh">Cengkeh</option>
+                <option value="Minyak">Minyak</option>
+                <option value="Custom">Custom</option>
+              </select>
+            </label>
+            <label id="customCommodityWrapper" hidden style="display: none;">Nama Komoditas Custom
+              <input name="custom_commodity" id="customCommodity" placeholder="Ketik nama barang..." />
+            </label>
             <label>Tonase (ton)
               <input name="tonnage" type="number" min="0" step="0.1" required placeholder="25" />
             </label>

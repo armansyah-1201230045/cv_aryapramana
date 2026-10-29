@@ -1171,6 +1171,10 @@ fieldset.plain {
   min-width: 0;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 fieldset.plain[disabled],
 fieldset.plain[hidden] {
   display: none;
